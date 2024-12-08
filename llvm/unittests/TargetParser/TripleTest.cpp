@@ -606,6 +606,18 @@ TEST(TripleTest, ParsedIDs) {
   EXPECT_EQ(Triple::UnknownOS, T.getOS());
   EXPECT_EQ(Triple::UnknownEnvironment, T.getEnvironment());
 
+  T = Triple("blucpu-unknown-unknown");
+  EXPECT_EQ(Triple::blucpu, T.getArch());
+  EXPECT_EQ(Triple::UnknownVendor, T.getVendor());
+  EXPECT_EQ(Triple::UnknownOS, T.getOS());
+  EXPECT_EQ(Triple::UnknownEnvironment, T.getEnvironment());
+
+  T = Triple("blucpu");
+  EXPECT_EQ(Triple::blucpu, T.getArch());
+  EXPECT_EQ(Triple::UnknownVendor, T.getVendor());
+  EXPECT_EQ(Triple::UnknownOS, T.getOS());
+  EXPECT_EQ(Triple::UnknownEnvironment, T.getEnvironment());
+
   T = Triple("lanai-unknown-unknown");
   EXPECT_EQ(Triple::lanai, T.getArch());
   EXPECT_EQ(Triple::UnknownVendor, T.getVendor());
@@ -1574,6 +1586,11 @@ TEST(TripleTest, BitWidthChecks) {
   T.setArch(Triple::avr);
   EXPECT_TRUE(T.isArch16Bit());
   EXPECT_FALSE(T.isArch32Bit());
+  EXPECT_FALSE(T.isArch64Bit());
+
+  T.setArch(Triple::blucpu);
+  EXPECT_FALSE(T.isArch16Bit());
+  EXPECT_TRUE(T.isArch32Bit());
   EXPECT_FALSE(T.isArch64Bit());
 
   T.setArch(Triple::lanai);

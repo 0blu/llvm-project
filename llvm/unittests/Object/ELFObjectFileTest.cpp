@@ -239,6 +239,13 @@ TEST(ELFObjectFileTest, MachineTestForAVR) {
     checkFormatAndArch(Data, Formats[Idx], Triple::avr);
 }
 
+TEST(ELFObjectFileTest, MachineTestForBLUCPU) {
+  std::array<StringRef, 4> Formats = {"elf32-blucpu", "elf32-blucpu",
+                                      "elf64-unknown", "elf64-unknown"};
+  for (auto [Idx, Data] : enumerate(generateData(ELF::EM_BLUCPU)))
+    checkFormatAndArch(Data, Formats[Idx], Triple::blucpu);
+}
+
 TEST(ELFObjectFileTest, MachineTestForHEXAGON) {
   std::array<StringRef, 4> Formats = {"elf32-hexagon", "elf32-hexagon",
                                       "elf64-unknown", "elf64-unknown"};

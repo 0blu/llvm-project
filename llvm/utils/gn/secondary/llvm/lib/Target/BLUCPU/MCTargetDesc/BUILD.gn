@@ -1,0 +1,65 @@
+import("//llvm/utils/TableGen/tablegen.gni")
+
+tablegen("BLUCPUGenAsmWriter") {
+  visibility = [ ":MCTargetDesc" ]
+  args = [ "-gen-asm-writer" ]
+  td_file = "../BLUCPU.td"
+}
+
+tablegen("BLUCPUGenInstrInfo") {
+  visibility = [ ":MCTargetDesc" ]
+  args = [ "-gen-instr-info" ]
+  td_file = "../BLUCPU.td"
+}
+
+tablegen("BLUCPUGenMCCodeEmitter") {
+  visibility = [ ":MCTargetDesc" ]
+  args = [ "-gen-emitter" ]
+  td_file = "../BLUCPU.td"
+}
+
+tablegen("BLUCPUGenRegisterInfo") {
+  visibility = [ ":MCTargetDesc" ]
+  args = [ "-gen-register-info" ]
+  td_file = "../BLUCPU.td"
+}
+
+tablegen("BLUCPUGenSubtargetInfo") {
+  visibility = [ ":MCTargetDesc" ]
+  args = [ "-gen-subtarget" ]
+  td_file = "../BLUCPU.td"
+}
+
+static_library("MCTargetDesc") {
+  output_name = "LLVMBLUCPUDesc"
+
+  # This should contain tablegen targets generating .inc files included
+  # by other targets. .inc files only used by .cpp files in this directory
+  # should be in deps instead.
+  public_deps = [
+    ":BLUCPUGenInstrInfo",
+    ":BLUCPUGenRegisterInfo",
+    ":BLUCPUGenSubtargetInfo",
+  ]
+  deps = [
+    ":BLUCPUGenAsmWriter",
+    ":BLUCPUGenMCCodeEmitter",
+    "//llvm/lib/MC",
+    "//llvm/lib/Support",
+    "//llvm/lib/Target/BLUCPU/TargetInfo",
+    "//llvm/lib/TargetParser",
+  ]
+  include_dirs = [ ".." ]
+  sources = [
+    "BLUCPUAsmBackend.cpp",
+    "BLUCPUELFObjectWriter.cpp",
+    "BLUCPUELFStreamer.cpp",
+    "BLUCPUInstPrinter.cpp",
+    "BLUCPUMCAsmInfo.cpp",
+    "BLUCPUMCCodeEmitter.cpp",
+    "BLUCPUMCELFStreamer.cpp",
+    "BLUCPUMCExpr.cpp",
+    "BLUCPUMCTargetDesc.cpp",
+    "BLUCPUTargetStreamer.cpp",
+  ]
+}

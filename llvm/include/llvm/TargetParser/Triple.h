@@ -53,6 +53,7 @@ public:
     aarch64_32,     // AArch64 (little endian) ILP32: aarch64_32
     arc,            // ARC: Synopsys ARC
     avr,            // AVR: Atmel AVR microcontroller
+    blucpu,         // _BLU's Custom ISA
     bpfel,          // eBPF or extended BPF or 64-bit BPF (little endian)
     bpfeb,          // eBPF or extended BPF or 64-bit BPF (big endian)
     csky,           // CSKY: csky

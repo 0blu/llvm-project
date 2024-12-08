@@ -13,6 +13,7 @@ llvm_all_stable_targets = [
   "AMDGPU",
   "ARM",
   "AVR",
+  "BLUCPU",
   "BPF",
   "Hexagon",
   "Lanai",
@@ -95,7 +96,7 @@ foreach(target, llvm_targets_to_build) {
     llvm_build_X86 = true
   } else if (target == "AVR" || target == "Hexagon" || target == "Lanai" ||
              target == "NVPTX" || target == "RISCV" || target == "Sparc" ||
-             target == "SystemZ") {
+             target == "SystemZ" || target == "BLUCPU") {
     # Nothing to do.
   } else {
     all_targets_string = ""

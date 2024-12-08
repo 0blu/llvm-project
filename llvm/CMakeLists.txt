@@ -472,6 +472,7 @@ set(LLVM_ALL_TARGETS
   AMDGPU
   ARM
   AVR
+  BLUCPU
   BPF
   Hexagon
   Lanai

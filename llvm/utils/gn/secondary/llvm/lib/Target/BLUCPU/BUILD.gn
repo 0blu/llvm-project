@@ -1,0 +1,61 @@
+import("//llvm/utils/TableGen/tablegen.gni")
+
+tablegen("BLUCPUGenCallingConv") {
+  visibility = [ ":LLVMBLUCPUCodeGen" ]
+  args = [ "-gen-callingconv" ]
+  td_file = "BLUCPU.td"
+}
+
+tablegen("BLUCPUGenDAGISel") {
+  visibility = [ ":LLVMBLUCPUCodeGen" ]
+  args = [ "-gen-dag-isel" ]
+  td_file = "BLUCPU.td"
+}
+
+static_library("LLVMBLUCPUCodeGen") {
+  deps = [
+    ":BLUCPUGenCallingConv",
+    ":BLUCPUGenDAGISel",
+    "MCTargetDesc",
+    "TargetInfo",
+    "//llvm/include/llvm/Config:llvm-config",
+    "//llvm/lib/CodeGen",
+    "//llvm/lib/CodeGen/AsmPrinter",
+    "//llvm/lib/CodeGen/SelectionDAG",
+    "//llvm/lib/IR",
+    "//llvm/lib/MC",
+    "//llvm/lib/Support",
+    "//llvm/lib/Target",
+  ]
+  include_dirs = [ "." ]
+  sources = [
+    "BLUCPUAsmPrinter.cpp",
+    "BLUCPUExpandPseudoInsts.cpp",
+    "BLUCPUFrameLowering.cpp",
+    "BLUCPUISelDAGToDAG.cpp",
+    "BLUCPUISelLowering.cpp",
+    "BLUCPUInstrInfo.cpp",
+    "BLUCPUMCInstLower.cpp",
+    "BLUCPURegisterInfo.cpp",
+    "BLUCPUShiftExpand.cpp",
+    "BLUCPUSubtarget.cpp",
+    "BLUCPUTargetMachine.cpp",
+    "BLUCPUTargetObjectFile.cpp",
+  ]
+}
+
+# This is a bit different from most build files: Due to this group
+# having the directory's name, "//llvm/lib/Target/BLUCPU" will refer to this
+# target, which pulls in the code in this directory *and all subdirectories*.
+# For most other directories, "//llvm/lib/Foo" only pulls in the code directly
+# in "llvm/lib/Foo". The forwarding targets in //llvm/lib/Target expect this
+# different behavior.
+group("BLUCPU") {
+  deps = [
+    ":LLVMBLUCPUCodeGen",
+    "AsmParser",
+    "Disassembler",
+    "MCTargetDesc",
+    "TargetInfo",
+  ]
+}

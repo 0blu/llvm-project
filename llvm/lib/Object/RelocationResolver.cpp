@@ -828,6 +828,8 @@ getRelocationResolver(const ObjectFile &Obj) {
       return {supportsARM, resolveARM};
     case Triple::avr:
       return {supportsAVR, resolveAVR};
+    case Triple::blucpu:
+      llvm_unreachable("TODO: BLUCPU");
     case Triple::lanai:
       return {supportsLanai, resolveLanai};
     case Triple::loongarch32:
