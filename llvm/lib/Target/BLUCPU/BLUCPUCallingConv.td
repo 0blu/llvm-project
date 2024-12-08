@@ -14,10 +14,10 @@
 //===----------------------------------------------------------------------===//
 
 // Special return value calling convention for runtime functions.
-def RetCC_BLUCPU_BUILTIN : CallingConv<[
-  CCIfType<[i8], CCAssignToReg<[R24, R25]>>,
-  CCIfType<[i16], CCAssignToReg<[R23R22, R25R24]>>
-]>;
+//def RetCC_BLUCPU_BUILTIN : CallingConv<[
+//  CCIfType<[i8], CCAssignToReg<[R24, R25]>>,
+//  CCIfType<[i16], CCAssignToReg<[R23R22, R25R24]>>
+//]>;
 
 //===----------------------------------------------------------------------===//
 // BLUCPU Argument Calling Conventions
@@ -27,9 +27,7 @@ def RetCC_BLUCPU_BUILTIN : CallingConv<[
 
 // Calling convention for variadic functions.
 def ArgCC_BLUCPU_Vararg : CallingConv<[
-  // i8 are always passed through the stack with a byte slot and byte alignment.
-  CCIfType<[i8], CCAssignToStack<1, 1>>,
-  // i16 are always passed through the stack with an alignment of 1.
+  // VarArgs always passed by stack.
   CCAssignToStack<2, 1>
 ]>;
 
@@ -37,7 +35,5 @@ def ArgCC_BLUCPU_Vararg : CallingConv<[
 // Callee-saved register lists.
 //===----------------------------------------------------------------------===//
 
-def CSR_Normal : CalleeSavedRegs<(add R29, R28, (sequence "R%u", 17, 2))>;
-def CSR_NormalTiny : CalleeSavedRegs<(add R29, R28, R19, R18)>;
-def CSR_Interrupts : CalleeSavedRegs<(add(sequence "R%u", 31, 2))>;
-def CSR_InterruptsTiny : CalleeSavedRegs<(add(sequence "R%u", 31, 18))>;
+def CSR_Normal : CalleeSavedRegs<(add R9, R8, R7, R6, R5)>;
+def CSR_NoRegs : CalleeSavedRegs<(add)>;

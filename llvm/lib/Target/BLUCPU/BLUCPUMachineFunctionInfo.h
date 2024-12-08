@@ -70,14 +70,6 @@ public:
   bool getHasStackArgs() const { return HasStackArgs; }
   void setHasStackArgs(bool B) { HasStackArgs = B; }
 
-  /// Checks if the function is some form of interrupt service routine.
-  bool isInterruptOrSignalHandler() const {
-    return isInterruptHandler() || isSignalHandler();
-  }
-
-  bool isInterruptHandler() const { return IsInterruptHandler; }
-  bool isSignalHandler() const { return IsSignalHandler; }
-
   unsigned getCalleeSavedFrameSize() const { return CalleeSavedFrameSize; }
   void setCalleeSavedFrameSize(unsigned Bytes) { CalleeSavedFrameSize = Bytes; }
 

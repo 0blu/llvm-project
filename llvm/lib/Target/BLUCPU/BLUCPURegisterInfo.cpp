@@ -35,21 +35,12 @@ BLUCPURegisterInfo::BLUCPURegisterInfo() : BLUCPUGenRegisterInfo(0) {}
 
 const uint16_t *
 BLUCPURegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  const BLUCPUMachineFunctionInfo *AFI = MF->getInfo<BLUCPUMachineFunctionInfo>();
-  const BLUCPUSubtarget &STI = MF->getSubtarget<BLUCPUSubtarget>();
-  if (STI.hasTinyEncoding())
-    return AFI->isInterruptOrSignalHandler() ? CSR_InterruptsTiny_SaveList
-                                             : CSR_NormalTiny_SaveList;
-  else
-    return AFI->isInterruptOrSignalHandler() ? CSR_Interrupts_SaveList
-                                             : CSR_Normal_SaveList;
+  return CSR_Normal_SaveList;
 }
 
 const uint32_t *
-BLUCPURegisterInfo::getCallPreservedMask(const MachineFunction &MF,
-                                      CallingConv::ID CC) const {
-  const BLUCPUSubtarget &STI = MF.getSubtarget<BLUCPUSubtarget>();
-  return STI.hasTinyEncoding() ? CSR_NormalTiny_RegMask : CSR_Normal_RegMask;
+BLUCPURegisterInfo::getCallPreservedMask(const MachineFunction &MF, CallingConv::ID CC) const {
+  return CSR_Normal_RegMask;
 }
 
 BitVector BLUCPURegisterInfo::getReservedRegs(const MachineFunction &MF) const {

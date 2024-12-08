@@ -45,26 +45,9 @@ BLUCPUTargetLowering::BLUCPUTargetLowering(const BLUCPUTargetMachine &TM,
 
   setBooleanContents(ZeroOrOneBooleanContent);
   setBooleanVectorContents(ZeroOrOneBooleanContent);
-  setSchedulingPreference(Sched::RegPressure);
+  setSchedulingPreference(Sched::Linearize); // Dont add any kind of optimization
+
   setStackPointerRegisterToSaveRestore(BLUCPU::SP);
-  setSupportsUnalignedAtomics(true);
-
-  setOperationAction(ISD::GlobalAddress, MVT::i16, Custom);
-  setOperationAction(ISD::BlockAddress, MVT::i16, Custom);
-
-  setOperationAction(ISD::STACKSAVE, MVT::Other, Expand);
-  setOperationAction(ISD::STACKRESTORE, MVT::Other, Expand);
-  setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i8, Expand);
-  setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i16, Expand);
-
-  setOperationAction(ISD::INLINEASM, MVT::Other, Custom);
-
-  for (MVT VT : MVT::integer_valuetypes()) {
-    for (auto N : {ISD::EXTLOAD, ISD::SEXTLOAD, ISD::ZEXTLOAD}) {
-      setLoadExtAction(N, VT, MVT::i1, Promote);
-      setLoadExtAction(N, VT, MVT::i8, Expand);
-    }
-  }
 
   setTruncStoreAction(MVT::i16, MVT::i8, Expand);
 
@@ -79,143 +62,6 @@ BLUCPUTargetLowering::BLUCPUTargetLowering(const BLUCPUTargetMachine &TM,
   // revert into a sub since we don't have an add with immediate instruction.
   setOperationAction(ISD::ADD, MVT::i32, Custom);
   setOperationAction(ISD::ADD, MVT::i64, Custom);
-
-  // our shift instructions are only able to shift 1 bit at a time, so handle
-  // this in a custom way.
-  setOperationAction(ISD::SRA, MVT::i8, Custom);
-  setOperationAction(ISD::SHL, MVT::i8, Custom);
-  setOperationAction(ISD::SRL, MVT::i8, Custom);
-  setOperationAction(ISD::SRA, MVT::i16, Custom);
-  setOperationAction(ISD::SHL, MVT::i16, Custom);
-  setOperationAction(ISD::SRL, MVT::i16, Custom);
-  setOperationAction(ISD::SRA, MVT::i32, Custom);
-  setOperationAction(ISD::SHL, MVT::i32, Custom);
-  setOperationAction(ISD::SRL, MVT::i32, Custom);
-  setOperationAction(ISD::SHL_PARTS, MVT::i16, Expand);
-  setOperationAction(ISD::SRA_PARTS, MVT::i16, Expand);
-  setOperationAction(ISD::SRL_PARTS, MVT::i16, Expand);
-
-  setOperationAction(ISD::ROTL, MVT::i8, Custom);
-  setOperationAction(ISD::ROTL, MVT::i16, Expand);
-  setOperationAction(ISD::ROTR, MVT::i8, Custom);
-  setOperationAction(ISD::ROTR, MVT::i16, Expand);
-
-  setOperationAction(ISD::BR_CC, MVT::i8, Custom);
-  setOperationAction(ISD::BR_CC, MVT::i16, Custom);
-  setOperationAction(ISD::BR_CC, MVT::i32, Custom);
-  setOperationAction(ISD::BR_CC, MVT::i64, Custom);
-  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
-
-  setOperationAction(ISD::SELECT_CC, MVT::i8, Custom);
-  setOperationAction(ISD::SELECT_CC, MVT::i16, Custom);
-  setOperationAction(ISD::SELECT_CC, MVT::i32, Expand);
-  setOperationAction(ISD::SELECT_CC, MVT::i64, Expand);
-  setOperationAction(ISD::SETCC, MVT::i8, Custom);
-  setOperationAction(ISD::SETCC, MVT::i16, Custom);
-  setOperationAction(ISD::SETCC, MVT::i32, Custom);
-  setOperationAction(ISD::SETCC, MVT::i64, Custom);
-  setOperationAction(ISD::SELECT, MVT::i8, Expand);
-  setOperationAction(ISD::SELECT, MVT::i16, Expand);
-
-  setOperationAction(ISD::BSWAP, MVT::i16, Expand);
-
-  // Add support for postincrement and predecrement load/stores.
-  setIndexedLoadAction(ISD::POST_INC, MVT::i8, Legal);
-  setIndexedLoadAction(ISD::POST_INC, MVT::i16, Legal);
-  setIndexedLoadAction(ISD::PRE_DEC, MVT::i8, Legal);
-  setIndexedLoadAction(ISD::PRE_DEC, MVT::i16, Legal);
-  setIndexedStoreAction(ISD::POST_INC, MVT::i8, Legal);
-  setIndexedStoreAction(ISD::POST_INC, MVT::i16, Legal);
-  setIndexedStoreAction(ISD::PRE_DEC, MVT::i8, Legal);
-  setIndexedStoreAction(ISD::PRE_DEC, MVT::i16, Legal);
-
-  setOperationAction(ISD::BR_JT, MVT::Other, Expand);
-
-  setOperationAction(ISD::VASTART, MVT::Other, Custom);
-  setOperationAction(ISD::VAEND, MVT::Other, Expand);
-  setOperationAction(ISD::VAARG, MVT::Other, Expand);
-  setOperationAction(ISD::VACOPY, MVT::Other, Expand);
-
-  // Atomic operations which must be lowered to rtlib calls
-  for (MVT VT : MVT::integer_valuetypes()) {
-    setOperationAction(ISD::ATOMIC_SWAP, VT, Expand);
-    setOperationAction(ISD::ATOMIC_CMP_SWAP, VT, Expand);
-    setOperationAction(ISD::ATOMIC_LOAD_NAND, VT, Expand);
-    setOperationAction(ISD::ATOMIC_LOAD_MAX, VT, Expand);
-    setOperationAction(ISD::ATOMIC_LOAD_MIN, VT, Expand);
-    setOperationAction(ISD::ATOMIC_LOAD_UMAX, VT, Expand);
-    setOperationAction(ISD::ATOMIC_LOAD_UMIN, VT, Expand);
-  }
-
-  // Division/remainder
-  setOperationAction(ISD::UDIV, MVT::i8, Expand);
-  setOperationAction(ISD::UDIV, MVT::i16, Expand);
-  setOperationAction(ISD::UREM, MVT::i8, Expand);
-  setOperationAction(ISD::UREM, MVT::i16, Expand);
-  setOperationAction(ISD::SDIV, MVT::i8, Expand);
-  setOperationAction(ISD::SDIV, MVT::i16, Expand);
-  setOperationAction(ISD::SREM, MVT::i8, Expand);
-  setOperationAction(ISD::SREM, MVT::i16, Expand);
-
-  // Make division and modulus custom
-  setOperationAction(ISD::UDIVREM, MVT::i8, Custom);
-  setOperationAction(ISD::UDIVREM, MVT::i16, Custom);
-  setOperationAction(ISD::UDIVREM, MVT::i32, Custom);
-  setOperationAction(ISD::SDIVREM, MVT::i8, Custom);
-  setOperationAction(ISD::SDIVREM, MVT::i16, Custom);
-  setOperationAction(ISD::SDIVREM, MVT::i32, Custom);
-
-  // Do not use MUL. The BLUCPU instructions are closer to SMUL_LOHI &co.
-  setOperationAction(ISD::MUL, MVT::i8, Expand);
-  setOperationAction(ISD::MUL, MVT::i16, Expand);
-
-  // Expand 16 bit multiplications.
-  setOperationAction(ISD::SMUL_LOHI, MVT::i16, Expand);
-  setOperationAction(ISD::UMUL_LOHI, MVT::i16, Expand);
-
-  // Expand multiplications to libcalls when there is
-  // no hardware MUL.
-  if (!Subtarget.supportsMultiplication()) {
-    setOperationAction(ISD::SMUL_LOHI, MVT::i8, Expand);
-    setOperationAction(ISD::UMUL_LOHI, MVT::i8, Expand);
-  }
-
-  for (MVT VT : MVT::integer_valuetypes()) {
-    setOperationAction(ISD::MULHS, VT, Expand);
-    setOperationAction(ISD::MULHU, VT, Expand);
-  }
-
-  for (MVT VT : MVT::integer_valuetypes()) {
-    setOperationAction(ISD::CTPOP, VT, Expand);
-    setOperationAction(ISD::CTLZ, VT, Expand);
-    setOperationAction(ISD::CTTZ, VT, Expand);
-  }
-
-  for (MVT VT : MVT::integer_valuetypes()) {
-    setOperationAction(ISD::SIGN_EXTEND_INREG, VT, Expand);
-    // TODO: The generated code is pretty poor. Investigate using the
-    // same "shift and subtract with carry" trick that we do for
-    // extending 8-bit to 16-bit. This may require infrastructure
-    // improvements in how we treat 16-bit "registers" to be feasible.
-  }
-
-  // Division and modulus rtlib functions
-  setLibcallName(RTLIB::SDIVREM_I8, "__divmodqi4");
-  setLibcallName(RTLIB::SDIVREM_I16, "__divmodhi4");
-  setLibcallName(RTLIB::SDIVREM_I32, "__divmodsi4");
-  setLibcallName(RTLIB::UDIVREM_I8, "__udivmodqi4");
-  setLibcallName(RTLIB::UDIVREM_I16, "__udivmodhi4");
-  setLibcallName(RTLIB::UDIVREM_I32, "__udivmodsi4");
-
-  // Several of the runtime library functions use a special calling conv
-  // setLibcallCallingConv(RTLIB::SDIVREM_I8, CallingConv::BLUCPU_BUILTIN);
-  // setLibcallCallingConv(RTLIB::SDIVREM_I16, CallingConv::BLUCPU_BUILTIN);
-  // setLibcallCallingConv(RTLIB::UDIVREM_I8, CallingConv::BLUCPU_BUILTIN);
-  // setLibcallCallingConv(RTLIB::UDIVREM_I16, CallingConv::BLUCPU_BUILTIN);
-
-  // Trigonometric rtlib functions
-  setLibcallName(RTLIB::SIN_F32, "sin");
-  setLibcallName(RTLIB::COS_F32, "cos");
 
   setMinFunctionAlignment(Align(2));
   setMinimumJumpTableEntries(UINT_MAX);
@@ -1197,24 +1043,23 @@ bool BLUCPUTargetLowering::isOffsetFoldingLegal(
 /// Registers for calling conventions, ordered in reverse as required by ABI.
 /// Both arrays must be of the same length.
 static const MCPhysReg RegList8BLUCPU[] = {
-    BLUCPU::R25, BLUCPU::R24, BLUCPU::R23, BLUCPU::R22, BLUCPU::R21, BLUCPU::R20,
+    BLUCPU::R25, BLUCPU::R24, BLUCPU::R23, BLUCPU::R21, BLUCPU::R20,
     BLUCPU::R19, BLUCPU::R18, BLUCPU::R17, BLUCPU::R16, BLUCPU::R15, BLUCPU::R14,
     BLUCPU::R13, BLUCPU::R12, BLUCPU::R11, BLUCPU::R10, BLUCPU::R9,  BLUCPU::R8};
 static const MCPhysReg RegList8Tiny[] = {BLUCPU::R25, BLUCPU::R24, BLUCPU::R23,
-                                         BLUCPU::R22, BLUCPU::R21, BLUCPU::R20};
+                                         BLUCPU::R21, BLUCPU::R20};
 static const MCPhysReg RegList16BLUCPU[] = {
-    BLUCPU::R26R25, BLUCPU::R25R24, BLUCPU::R24R23, BLUCPU::R23R22, BLUCPU::R22R21,
+    BLUCPU::R26R25, BLUCPU::R25R24, BLUCPU::R24R23,
     BLUCPU::R21R20, BLUCPU::R20R19, BLUCPU::R19R18, BLUCPU::R18R17, BLUCPU::R17R16,
     BLUCPU::R16R15, BLUCPU::R15R14, BLUCPU::R14R13, BLUCPU::R13R12, BLUCPU::R12R11,
     BLUCPU::R11R10, BLUCPU::R10R9,  BLUCPU::R9R8};
 static const MCPhysReg RegList16Tiny[] = {BLUCPU::R26R25, BLUCPU::R25R24,
-                                          BLUCPU::R24R23, BLUCPU::R23R22,
-                                          BLUCPU::R22R21, BLUCPU::R21R20};
+                                          BLUCPU::R24R23, BLUCPU::R21R20};
 
-static_assert(std::size(RegList8BLUCPU) == std::size(RegList16BLUCPU),
-              "8-bit and 16-bit register arrays must be of equal length");
-static_assert(std::size(RegList8Tiny) == std::size(RegList16Tiny),
-              "8-bit and 16-bit register arrays must be of equal length");
+//static_assert(std::size(RegList8BLUCPU) == std::size(RegList16BLUCPU),
+//              "8-bit and 16-bit register arrays must be of equal length");
+//static_assert(std::size(RegList8Tiny) == std::size(RegList16Tiny),
+//              "8-bit and 16-bit register arrays must be of equal length");
 
 /// Analyze incoming and outgoing function arguments. We need custom C++ code
 /// to handle special constraints in the ABI.
@@ -1734,7 +1579,7 @@ BLUCPUTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 
   const BLUCPUMachineFunctionInfo *AFI = MF.getInfo<BLUCPUMachineFunctionInfo>();
 
-  if (!AFI->isInterruptOrSignalHandler()) {
+  if (false) {
     // The return instruction has an implicit zero register operand: it must
     // contain zero on return.
     // This is not needed in interrupts however, where the zero register is
@@ -1742,8 +1587,7 @@ BLUCPUTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     RetOps.push_back(DAG.getRegister(Subtarget.getZeroRegister(), MVT::i8));
   }
 
-  unsigned RetOpc =
-      AFI->isInterruptOrSignalHandler() ? BLUCPUISD::RETI_GLUE : BLUCPUISD::RET_GLUE;
+  unsigned RetOpc = BLUCPUISD::RET_GLUE;
 
   RetOps[0] = Chain; // Update chain.
 

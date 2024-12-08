@@ -54,40 +54,7 @@ void BLUCPUFrameLowering::emitPrologue(MachineFunction &MF,
   const BLUCPUSubtarget &STI = MF.getSubtarget<BLUCPUSubtarget>();
   const BLUCPUInstrInfo &TII = *STI.getInstrInfo();
   const BLUCPUMachineFunctionInfo *AFI = MF.getInfo<BLUCPUMachineFunctionInfo>();
-  const MachineRegisterInfo &MRI = MF.getRegInfo();
   bool HasFP = hasFP(MF);
-
-  // Interrupt handlers re-enable interrupts in function entry.
-  if (AFI->isInterruptHandler()) {
-    BuildMI(MBB, MBBI, DL, TII.get(BLUCPU::BSETs))
-        .addImm(0x07)
-        .setMIFlag(MachineInstr::FrameSetup);
-  }
-
-  // Emit special prologue code to save R1, R0 and SREG in interrupt/signal
-  // handlers before saving any other registers.
-  if (AFI->isInterruptOrSignalHandler()) {
-    BuildMI(MBB, MBBI, DL, TII.get(BLUCPU::PUSHRr))
-        .addReg(STI.getTmpRegister(), RegState::Kill)
-        .setMIFlag(MachineInstr::FrameSetup);
-
-    BuildMI(MBB, MBBI, DL, TII.get(BLUCPU::INRdA), STI.getTmpRegister())
-        .addImm(STI.getIORegSREG())
-        .setMIFlag(MachineInstr::FrameSetup);
-    BuildMI(MBB, MBBI, DL, TII.get(BLUCPU::PUSHRr))
-        .addReg(STI.getTmpRegister(), RegState::Kill)
-        .setMIFlag(MachineInstr::FrameSetup);
-    if (!MRI.reg_empty(STI.getZeroRegister())) {
-      BuildMI(MBB, MBBI, DL, TII.get(BLUCPU::PUSHRr))
-          .addReg(STI.getZeroRegister(), RegState::Kill)
-          .setMIFlag(MachineInstr::FrameSetup);
-      BuildMI(MBB, MBBI, DL, TII.get(BLUCPU::EORRdRr))
-          .addReg(STI.getZeroRegister(), RegState::Define)
-          .addReg(STI.getZeroRegister(), RegState::Kill)
-          .addReg(STI.getZeroRegister(), RegState::Kill)
-          .setMIFlag(MachineInstr::FrameSetup);
-    }
-  }
 
   // Early exit if the frame pointer is not needed in this function.
   if (!HasFP) {
@@ -136,27 +103,7 @@ void BLUCPUFrameLowering::emitPrologue(MachineFunction &MF,
 }
 
 static void restoreStatusRegister(MachineFunction &MF, MachineBasicBlock &MBB) {
-  const BLUCPUMachineFunctionInfo *AFI = MF.getInfo<BLUCPUMachineFunctionInfo>();
-  const MachineRegisterInfo &MRI = MF.getRegInfo();
-
-  MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
-
-  DebugLoc DL = MBBI->getDebugLoc();
-  const BLUCPUSubtarget &STI = MF.getSubtarget<BLUCPUSubtarget>();
-  const BLUCPUInstrInfo &TII = *STI.getInstrInfo();
-
-  // Emit special epilogue code to restore R1, R0 and SREG in interrupt/signal
-  // handlers at the very end of the function, just before reti.
-  if (AFI->isInterruptOrSignalHandler()) {
-    if (!MRI.reg_empty(STI.getZeroRegister())) {
-      BuildMI(MBB, MBBI, DL, TII.get(BLUCPU::POPRd), STI.getZeroRegister());
-    }
-    BuildMI(MBB, MBBI, DL, TII.get(BLUCPU::POPRd), STI.getTmpRegister());
-    BuildMI(MBB, MBBI, DL, TII.get(BLUCPU::OUTARr))
-        .addImm(STI.getIORegSREG())
-        .addReg(STI.getTmpRegister(), RegState::Kill);
-    BuildMI(MBB, MBBI, DL, TII.get(BLUCPU::POPRd), STI.getTmpRegister());
-  }
+  llvm_unreachable_internal("restoreStatusRegister");
 }
 
 void BLUCPUFrameLowering::emitEpilogue(MachineFunction &MF,
@@ -165,7 +112,7 @@ void BLUCPUFrameLowering::emitEpilogue(MachineFunction &MF,
 
   // Early exit if the frame pointer is not needed in this function except for
   // signal/interrupt handlers where special code generation is required.
-  if (!hasFP(MF) && !AFI->isInterruptOrSignalHandler()) {
+  if (!hasFP(MF)) {
     return;
   }
 

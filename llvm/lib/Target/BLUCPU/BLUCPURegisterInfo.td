@@ -55,7 +55,6 @@ def R18 : BLUCPUReg<18, "r18">, DwarfRegNum<[18]>;
 def R19 : BLUCPUReg<19, "r19">, DwarfRegNum<[19]>;
 def R20 : BLUCPUReg<20, "r20">, DwarfRegNum<[20]>;
 def R21 : BLUCPUReg<21, "r21">, DwarfRegNum<[21]>;
-def R22 : BLUCPUReg<22, "r22">, DwarfRegNum<[22]>;
 def R23 : BLUCPUReg<23, "r23">, DwarfRegNum<[23]>;
 def R24 : BLUCPUReg<24, "r24">, DwarfRegNum<[24]>;
 def R25 : BLUCPUReg<25, "r25">, DwarfRegNum<[25]>;
@@ -81,7 +80,6 @@ let SubRegIndices = [sub_lo, sub_hi], CoveredBySubRegs = 1 in {
     def R27R26 : BLUCPUReg<26, "r27:r26", [R26, R27], ["X"]>, DwarfRegNum<[26]>;
   }
   def R25R24 : BLUCPUReg<24, "r25:r24", [R24, R25]>, DwarfRegNum<[24]>;
-  def R23R22 : BLUCPUReg<22, "r23:r22", [R22, R23]>, DwarfRegNum<[22]>;
   def R21R20 : BLUCPUReg<20, "r21:r20", [R20, R21]>, DwarfRegNum<[20]>;
   def R19R18 : BLUCPUReg<18, "r19:r18", [R18, R19]>, DwarfRegNum<[18]>;
   def R17R16 : BLUCPUReg<16, "r17:r16", [R16, R17]>, DwarfRegNum<[16]>;
@@ -97,7 +95,6 @@ let SubRegIndices = [sub_lo, sub_hi], CoveredBySubRegs = 1 in {
   // Pseudo registers for unaligned i16
   def R26R25 : BLUCPUReg<25, "r26:r25", [R25, R26]>, DwarfRegNum<[25]>;
   def R24R23 : BLUCPUReg<23, "r24:r23", [R23, R24]>, DwarfRegNum<[23]>;
-  def R22R21 : BLUCPUReg<21, "r22:r21", [R21, R22]>, DwarfRegNum<[21]>;
   def R20R19 : BLUCPUReg<19, "r20:r19", [R19, R20]>, DwarfRegNum<[19]>;
   def R18R17 : BLUCPUReg<17, "r18:r17", [R17, R18]>, DwarfRegNum<[17]>;
   def R16R15 : BLUCPUReg<15, "r16:r15", [R15, R16]>, DwarfRegNum<[15]>;
@@ -114,11 +111,10 @@ let SubRegIndices = [sub_lo, sub_hi], CoveredBySubRegs = 1 in {
 def GPR8 : RegisterClass<"BLUCPU", [i8], 8,
                          (
                              // Return value and argument registers.
-                             add R24, R25, R18, R19, R20, R21, R22, R23,
+                             add R24, R25, R18, R19, R20, R21, R23,
                              // Scratch registers.
                              R30, R31, R26, R27,
                              // Callee saved registers.
-                             R28, R29, R17, R16, R15, R14, R13, R12, R11, R10,
                              R9, R8, R7, R6, R5, R4, R3, R2, R0, R1)>;
 
 // Simple lower registers r0..r15
@@ -130,7 +126,7 @@ def GPR8lo : RegisterClass<"BLUCPU", [i8], 8,
 def LD8 : RegisterClass<"BLUCPU", [i8], 8,
                         (
                             // Return value and arguments.
-                            add R24, R25, R18, R19, R20, R21, R22, R23,
+                            add R24, R25, R18, R19, R20, R21, R23,
                             // Scratch registers.
                             R30, R31, R26, R27,
                             // Callee saved registers.
@@ -138,20 +134,20 @@ def LD8 : RegisterClass<"BLUCPU", [i8], 8,
 
 // Simple lower registers r16..r23
 def LD8lo : RegisterClass<"BLUCPU", [i8], 8,
-                          (add R23, R22, R21, R20, R19, R18, R17, R16)>;
+                          (add R23, R21, R20, R19, R18, R17, R16)>;
 
 // Main 16-bit pair register class.
 def DREGS : RegisterClass<"BLUCPU", [i16], 8,
                           (
                               // Return value and arguments.
-                              add R25R24, R19R18, R21R20, R23R22,
+                              add R25R24, R19R18, R21R20,
                               // Scratch registers.
                               R31R30, R27R26,
                               // Callee saved registers.
                               R29R28, R17R16, R15R14, R13R12, R11R10, R9R8,
                               R7R6, R5R4, R3R2, R1R0,
                               // Pseudo regs for unaligned 16-bits
-                              R26R25, R24R23, R22R21, R20R19, R18R17, R16R15,
+                              R26R25, R24R23, R20R19, R18R17, R16R15,
                               R14R13, R12R11, R10R9)>;
 
 // Lower 16-bit pair registers in R0..R15, only used in inline assembly.
@@ -163,7 +159,7 @@ def DREGSlo
 def DREGSLD8lo : RegisterClass<"BLUCPU", [i16], 8,
                                (
                                    // Return value and arguments.
-                                   add R19R18, R21R20, R23R22,
+                                   add R19R18, R21R20,
                                    // Callee saved registers.
                                    R17R16)>;
 
@@ -171,7 +167,7 @@ def DREGSLD8lo : RegisterClass<"BLUCPU", [i16], 8,
 def DREGSMOVW : RegisterClass<"BLUCPU", [i16], 8,
                               (
                                   // Return value and arguments.
-                                  add R25R24, R19R18, R21R20, R23R22,
+                                  add R25R24, R19R18, R21R20,
                                   // Scratch registers.
                                   R31R30, R27R26,
                                   // Callee saved registers.
@@ -182,7 +178,7 @@ def DREGSMOVW : RegisterClass<"BLUCPU", [i16], 8,
 def DLDREGS : RegisterClass<"BLUCPU", [i16], 8,
                             (
                                 // Return value and arguments.
-                                add R25R24, R19R18, R21R20, R23R22,
+                                add R25R24, R19R18, R21R20,
                                 // Scratch registers.
                                 R31R30, R27R26,
                                 // Callee saved registers.
