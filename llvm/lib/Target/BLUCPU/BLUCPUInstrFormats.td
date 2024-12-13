@@ -553,7 +553,7 @@ class FSK<bit f, dag outs, dag ins, string asmstr, list<dag> pattern>
 
 class ExtensionPseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
     : Pseudo<outs, ins, asmstr, pattern> {
-  let Defs = [SREG];
+  let Defs = [R0];
 }
 
 class StorePseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
@@ -565,12 +565,12 @@ class SelectPseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
     : Pseudo<outs, ins, asmstr, pattern> {
   let usesCustomInserter = 1;
 
-  let Uses = [SREG];
+  let Uses = [R0];
 }
 
 class ShiftPseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
     : Pseudo<outs, ins, asmstr, pattern> {
   let usesCustomInserter = 1;
 
-  let Defs = [SREG];
+  let Defs = [R0];
 }

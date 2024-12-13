@@ -41,42 +41,6 @@ void BLUCPUInstPrinter::printInst(const MCInst *MI, uint64_t Address,
   // of the form "ld reg, X+".
   // TODO: We should be able to rewrite this using TableGen data.
   switch (Opcode) {
-  case BLUCPU::LDRdPtr:
-  case BLUCPU::LDRdPtrPi:
-  case BLUCPU::LDRdPtrPd:
-    O << "\tld\t";
-    printOperand(MI, 0, O);
-    O << ", ";
-
-    if (Opcode == BLUCPU::LDRdPtrPd)
-      O << '-';
-
-    printOperand(MI, 1, O);
-
-    if (Opcode == BLUCPU::LDRdPtrPi)
-      O << '+';
-    break;
-  case BLUCPU::STPtrRr:
-    O << "\tst\t";
-    printOperand(MI, 0, O);
-    O << ", ";
-    printOperand(MI, 1, O);
-    break;
-  case BLUCPU::STPtrPiRr:
-  case BLUCPU::STPtrPdRr:
-    O << "\tst\t";
-
-    if (Opcode == BLUCPU::STPtrPdRr)
-      O << '-';
-
-    printOperand(MI, 1, O);
-
-    if (Opcode == BLUCPU::STPtrPiRr)
-      O << '+';
-
-    O << ", ";
-    printOperand(MI, 2, O);
-    break;
   default:
     if (!printAliasInstr(MI, Address, O))
       printInstruction(MI, Address, O);
@@ -88,26 +52,12 @@ void BLUCPUInstPrinter::printInst(const MCInst *MI, uint64_t Address,
 
 const char *BLUCPUInstPrinter::getPrettyRegisterName(unsigned RegNum,
                                                   MCRegisterInfo const &MRI) {
-  // GCC prints register pairs by just printing the lower register
-  // If the register contains a subregister, print it instead
-  if (MRI.getNumSubRegIndices() > 0) {
-    unsigned RegLoNum = MRI.getSubReg(RegNum, BLUCPU::sub_lo);
-    RegNum = (RegLoNum != BLUCPU::NoRegister) ? RegLoNum : RegNum;
-  }
-
   return getRegisterName(RegNum);
 }
 
 void BLUCPUInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
                                   raw_ostream &O) {
   const MCOperandInfo &MOI = this->MII.get(MI->getOpcode()).operands()[OpNo];
-  if (MOI.RegClass == BLUCPU::ZREGRegClassID) {
-    // Special case for the Z register, which sometimes doesn't have an operand
-    // in the MCInst.
-    O << "Z";
-    return;
-  }
-
   if (OpNo >= MI->size()) {
     // Not all operands are correctly disassembled at the moment. This means
     // that some machine instructions won't have all the necessary operands
@@ -121,9 +71,7 @@ void BLUCPUInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
   const MCOperand &Op = MI->getOperand(OpNo);
 
   if (Op.isReg()) {
-    bool isPtrReg = (MOI.RegClass == BLUCPU::PTRREGSRegClassID) ||
-                    (MOI.RegClass == BLUCPU::PTRDISPREGSRegClassID) ||
-                    (MOI.RegClass == BLUCPU::ZREGRegClassID);
+    bool isPtrReg = false;
 
     if (isPtrReg) {
       O << getRegisterName(Op.getReg(), BLUCPU::ptr);
