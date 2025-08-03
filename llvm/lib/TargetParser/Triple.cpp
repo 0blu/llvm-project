@@ -35,6 +35,7 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
   case arm:            return "arm";
   case armeb:          return "armeb";
   case avr:            return "avr";
+  case blucpu:         return "blucpu";
   case bpfeb:          return "bpfeb";
   case bpfel:          return "bpfel";
   case csky:           return "csky";
@@ -937,6 +938,7 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::arc:
   case Triple::armeb:
   case Triple::avr:
+  case Triple::blucpu:
   case Triple::bpfeb:
   case Triple::bpfel:
   case Triple::csky:
@@ -1649,6 +1651,7 @@ unsigned Triple::getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
 
   case llvm::Triple::aarch64_32:
   case llvm::Triple::amdil:
+  case llvm::Triple::blucpu:
   case llvm::Triple::arc:
   case llvm::Triple::arm:
   case llvm::Triple::armeb:
@@ -1762,6 +1765,7 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::arc:
   case Triple::arm:
   case Triple::armeb:
+  case Triple::blucpu:
   case Triple::csky:
   case Triple::dxil:
   case Triple::hexagon:
@@ -1828,6 +1832,7 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::UnknownArch:
   case Triple::arc:
   case Triple::avr:
+  case Triple::blucpu:
   case Triple::csky:
   case Triple::dxil:
   case Triple::hexagon:

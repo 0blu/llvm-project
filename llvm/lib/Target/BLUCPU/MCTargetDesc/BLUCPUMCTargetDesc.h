@@ -1,0 +1,8 @@
+#ifndef LLVM_BLUCPU_MCTARGET_DESC_H
+#define LLVM_BLUCPU_MCTARGET_DESC_H
+
+namespace llvm {
+
+}
+
+#endif // LLVM_BLUCPU_MCTARGET_DESC_H
