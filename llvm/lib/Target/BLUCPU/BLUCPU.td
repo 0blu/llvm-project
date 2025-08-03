@@ -16,3 +16,10 @@ def BLUCPU : Target {
   let InstructionSet = BLUCPUInstrInfo;
   let AssemblyWriters = [BLUCPUAsmWriter];
 }
+
+// == We need at least one subtarget ==
+// Empty feature set
+def FeatureNone : SubtargetFeature<"", "", "", "No features supported">;
+// Define a single processor called "all"
+def : ProcessorModel<"all", NoSchedModel, [FeatureNone]>;
+

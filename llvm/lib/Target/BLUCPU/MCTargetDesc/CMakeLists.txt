@@ -1,5 +1,6 @@
 add_llvm_component_library(LLVMBLUCPUDesc
     BLUCPUMCTargetDesc.cpp
+    BLUCPUMCAsmInfo.cpp
 
     LINK_COMPONENTS
     MC

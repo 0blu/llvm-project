@@ -35,5 +35,7 @@ BLUCPUTargetMachine::BLUCPUTargetMachine(const Target &T, const Triple &TT,
                                          std::optional<Reloc::Model> RM,
                                          std::optional<CodeModel::Model> CM,
                                          CodeGenOptLevel OL, bool JIT)
-    : CodeGenTargetMachineImpl(T, BLUCPUDataLayout, TT, getCPU(CPU), FS, Options, getEffectiveRelocModel(RM), getEffectiveCodeModel(CM, CodeModel::Small), OL) {}
+    : CodeGenTargetMachineImpl(T, BLUCPUDataLayout, TT, getCPU(CPU), FS, Options, getEffectiveRelocModel(RM), getEffectiveCodeModel(CM, CodeModel::Small), OL) {
+  initAsmInfo();
+}
 } // namespace llvm
