@@ -13,7 +13,6 @@
 
 #include "BLUCPU.h"
 #include "BLUCPUMCInstLower.h"
-#include "BLUCPUSubtarget.h"
 #include "BLUCPUTargetMachine.h"
 #include "MCTargetDesc/BLUCPUInstPrinter.h"
 #include "MCTargetDesc/BLUCPUMCExpr.h"
@@ -122,22 +121,21 @@ bool BLUCPUAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNum,
     const InlineAsm::Flag OpFlags(MI->getOperand(OpNum - 1).getImm());
     const unsigned NumOpRegs = OpFlags.getNumOperandRegisters();
 
-    const BLUCPUSubtarget &STI = MF->getSubtarget<BLUCPUSubtarget>();
-    const TargetRegisterInfo &TRI = *STI.getRegisterInfo();
+    // const TargetRegisterInfo &TRI = MF->getRegInfo();
 
-    const TargetRegisterClass *RC = TRI.getMinimalPhysRegClass(Reg);
-    unsigned BytesPerReg = TRI.getRegSizeInBits(*RC) / 8;
-    assert(BytesPerReg <= 2 && "Only 8 and 16 bit regs are supported.");
-
-    unsigned RegIdx = ByteNumber / BytesPerReg;
-    if (RegIdx >= NumOpRegs)
-      return true;
-    Reg = MI->getOperand(OpNum + RegIdx).getReg();
-
-    if (BytesPerReg == 2) {
-      Reg = TRI.getSubReg(Reg, (ByteNumber % BytesPerReg) ? BLUCPU::sub_hi
-                                                          : BLUCPU::sub_lo);
-    }
+    // const TargetRegisterClass *RC = TRI.getMinimalPhysRegClass(Reg);
+    // unsigned BytesPerReg = TRI.getRegSizeInBits(*RC) / 8;
+    // assert(BytesPerReg <= 2 && "Only 8 and 16 bit regs are supported.");
+    //
+    // unsigned RegIdx = ByteNumber / BytesPerReg;
+    // if (RegIdx >= NumOpRegs)
+    //   return true;
+    // Reg = MI->getOperand(OpNum + RegIdx).getReg();
+    //
+    // if (BytesPerReg == 2) {
+    //   Reg = TRI.getSubReg(Reg, (ByteNumber % BytesPerReg) ? BLUCPU::sub_hi
+    //                                                       : BLUCPU::sub_lo);
+    // }
 
     O << BLUCPUInstPrinter::getPrettyRegisterName(Reg, MRI);
     return false;
@@ -161,30 +159,30 @@ bool BLUCPUAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
   (void)MO;
   assert(MO.isReg() && "Unexpected inline asm memory operand");
 
-  // TODO: We should be able to look up the alternative name for
-  // the register if it's given.
-  // TableGen doesn't expose a way of getting retrieving names
-  // for registers.
-  if (MI->getOperand(OpNum).getReg() == BLUCPU::R31R30) {
-    O << "Z";
-  } else if (MI->getOperand(OpNum).getReg() == BLUCPU::R29R28) {
-    O << "Y";
-  } else if (MI->getOperand(OpNum).getReg() == BLUCPU::R27R26) {
-    O << "X";
-  } else {
-    assert(false && "Wrong register class for memory operand.");
-  }
+  // // TODO: We should be able to look up the alternative name for
+  // // the register if it's given.
+  // // TableGen doesn't expose a way of getting retrieving names
+  // // for registers.
+  // if (MI->getOperand(OpNum).getReg() == BLUCPU::R31R30) {
+  //   O << "Z";
+  // } else if (MI->getOperand(OpNum).getReg() == BLUCPU::R29R28) {
+  //   O << "Y";
+  // } else if (MI->getOperand(OpNum).getReg() == BLUCPU::R27R26) {
+  //   O << "X";
+  // } else {
+  //   assert(false && "Wrong register class for memory operand.");
+  // }
 
   // If NumOpRegs == 2, then we assume it is product of a FrameIndex expansion
   // and the second operand is an Imm.
   const InlineAsm::Flag OpFlags(MI->getOperand(OpNum - 1).getImm());
   const unsigned NumOpRegs = OpFlags.getNumOperandRegisters();
 
-  if (NumOpRegs == 2) {
-    assert(MI->getOperand(OpNum).getReg() != BLUCPU::R27R26 &&
-           "Base register X can not have offset/displacement.");
-    O << '+' << MI->getOperand(OpNum + 1).getImm();
-  }
+  // if (NumOpRegs == 2) {
+  //   assert(MI->getOperand(OpNum).getReg() != BLUCPU::R27R26 &&
+  //          "Base register X can not have offset/displacement.");
+  //   O << '+' << MI->getOperand(OpNum + 1).getImm();
+  // }
 
   return false;
 }
@@ -236,7 +234,6 @@ void BLUCPUAsmPrinter::emitXXStructor(const DataLayout &DL, const Constant *CV) 
 bool BLUCPUAsmPrinter::doFinalization(Module &M) {
   const TargetLoweringObjectFile &TLOF = getObjFileLowering();
   const BLUCPUTargetMachine &TM = (const BLUCPUTargetMachine &)MMI->getTarget();
-  const BLUCPUSubtarget *SubTM = (const BLUCPUSubtarget *)TM.getSubtargetImpl();
 
   bool NeedsCopyData = false;
   bool NeedsClearBSS = false;
@@ -251,15 +248,15 @@ bool BLUCPUAsmPrinter::doFinalization(Module &M) {
       continue;
     }
 
-    auto *Section = cast<MCSectionELF>(TLOF.SectionForGlobal(&GO, TM));
-    if (Section->getName().starts_with(".data"))
-      NeedsCopyData = true;
-    else if (Section->getName().starts_with(".rodata") && SubTM->hasLPM())
-      // BLUCPUs that have a separate program memory (that's most BLUCPUs) store
-      // .rodata sections in RAM.
-      NeedsCopyData = true;
-    else if (Section->getName().starts_with(".bss"))
-      NeedsClearBSS = true;
+    // auto *Section = cast<MCSectionELF>(TLOF.SectionForGlobal(&GO, TM));
+    // if (Section->getName().starts_with(".data"))
+    //   NeedsCopyData = true;
+    // else if (Section->getName().starts_with(".rodata") && SubTM->hasLPM())
+    //   // BLUCPUs that have a separate program memory (that's most BLUCPUs) store
+    //   // .rodata sections in RAM.
+    //   NeedsCopyData = true;
+    // else if (Section->getName().starts_with(".bss"))
+    //   NeedsClearBSS = true;
   }
 
   MCSymbol *DoCopyData = OutContext.getOrCreateSymbol("__do_copy_data");
@@ -285,41 +282,39 @@ bool BLUCPUAsmPrinter::doFinalization(Module &M) {
 
 void BLUCPUAsmPrinter::emitStartOfAsmFile(Module &M) {
   const BLUCPUTargetMachine &TM = (const BLUCPUTargetMachine &)MMI->getTarget();
-  const BLUCPUSubtarget *SubTM = (const BLUCPUSubtarget *)TM.getSubtargetImpl();
-  if (!SubTM)
     return;
-
-  // Emit __tmp_reg__.
-  OutStreamer->emitAssignment(
-      MMI->getContext().getOrCreateSymbol(StringRef("__tmp_reg__")),
-      MCConstantExpr::create(SubTM->getRegTmpIndex(), MMI->getContext()));
-  // Emit __zero_reg__.
-  OutStreamer->emitAssignment(
-      MMI->getContext().getOrCreateSymbol(StringRef("__zero_reg__")),
-      MCConstantExpr::create(SubTM->getRegZeroIndex(), MMI->getContext()));
-  // Emit __SREG__.
-  OutStreamer->emitAssignment(
-      MMI->getContext().getOrCreateSymbol(StringRef("__SREG__")),
-      MCConstantExpr::create(SubTM->getIORegSREG(), MMI->getContext()));
-  // Emit __SP_H__ if available.
-  if (!SubTM->hasSmallStack())
-    OutStreamer->emitAssignment(
-        MMI->getContext().getOrCreateSymbol(StringRef("__SP_H__")),
-        MCConstantExpr::create(SubTM->getIORegSPH(), MMI->getContext()));
-  // Emit __SP_L__.
-  OutStreamer->emitAssignment(
-      MMI->getContext().getOrCreateSymbol(StringRef("__SP_L__")),
-      MCConstantExpr::create(SubTM->getIORegSPL(), MMI->getContext()));
-  // Emit __EIND__ if available.
-  if (SubTM->hasEIJMPCALL())
-    OutStreamer->emitAssignment(
-        MMI->getContext().getOrCreateSymbol(StringRef("__EIND__")),
-        MCConstantExpr::create(SubTM->getIORegEIND(), MMI->getContext()));
-  // Emit __RAMPZ__ if available.
-  if (SubTM->hasELPM())
-    OutStreamer->emitAssignment(
-        MMI->getContext().getOrCreateSymbol(StringRef("__RAMPZ__")),
-        MCConstantExpr::create(SubTM->getIORegRAMPZ(), MMI->getContext()));
+  //
+  // // Emit __tmp_reg__.
+  // OutStreamer->emitAssignment(
+  //     MMI->getContext().getOrCreateSymbol(StringRef("__tmp_reg__")),
+  //     MCConstantExpr::create(SubTM->getRegTmpIndex(), MMI->getContext()));
+  // // Emit __zero_reg__.
+  // OutStreamer->emitAssignment(
+  //     MMI->getContext().getOrCreateSymbol(StringRef("__zero_reg__")),
+  //     MCConstantExpr::create(SubTM->getRegZeroIndex(), MMI->getContext()));
+  // // Emit __SREG__.
+  // OutStreamer->emitAssignment(
+  //     MMI->getContext().getOrCreateSymbol(StringRef("__SREG__")),
+  //     MCConstantExpr::create(SubTM->getIORegSREG(), MMI->getContext()));
+  // // Emit __SP_H__ if available.
+  // if (!SubTM->hasSmallStack())
+  //   OutStreamer->emitAssignment(
+  //       MMI->getContext().getOrCreateSymbol(StringRef("__SP_H__")),
+  //       MCConstantExpr::create(SubTM->getIORegSPH(), MMI->getContext()));
+  // // Emit __SP_L__.
+  // OutStreamer->emitAssignment(
+  //     MMI->getContext().getOrCreateSymbol(StringRef("__SP_L__")),
+  //     MCConstantExpr::create(SubTM->getIORegSPL(), MMI->getContext()));
+  // // Emit __EIND__ if available.
+  // if (SubTM->hasEIJMPCALL())
+  //   OutStreamer->emitAssignment(
+  //       MMI->getContext().getOrCreateSymbol(StringRef("__EIND__")),
+  //       MCConstantExpr::create(SubTM->getIORegEIND(), MMI->getContext()));
+  // // Emit __RAMPZ__ if available.
+  // if (SubTM->hasELPM())
+  //   OutStreamer->emitAssignment(
+  //       MMI->getContext().getOrCreateSymbol(StringRef("__RAMPZ__")),
+  //       MCConstantExpr::create(SubTM->getIORegRAMPZ(), MMI->getContext()));
 }
 
 } // end of namespace llvm

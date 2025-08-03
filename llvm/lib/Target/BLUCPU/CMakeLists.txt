@@ -24,7 +24,6 @@ add_llvm_target(BLUCPUCodeGen
   BLUCPUMCInstLower.cpp
   BLUCPURegisterInfo.cpp
   BLUCPUShiftExpand.cpp
-  BLUCPUSubtarget.cpp
   BLUCPUTargetMachine.cpp
   BLUCPUTargetObjectFile.cpp
 
@@ -47,7 +46,6 @@ add_llvm_target(BLUCPUCodeGen
   BLUCPU
   )
 
-add_subdirectory(AsmParser)
 add_subdirectory(Disassembler)
 add_subdirectory(MCTargetDesc)
 add_subdirectory(TargetInfo)

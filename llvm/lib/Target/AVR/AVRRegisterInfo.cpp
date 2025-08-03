@@ -108,38 +108,6 @@ AVRRegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
   llvm_unreachable("Invalid register size");
 }
 
-/// Fold a frame offset shared between two add instructions into a single one.
-static void foldFrameOffset(MachineBasicBlock::iterator &II, int &Offset,
-                            Register DstReg) {
-  MachineInstr &MI = *II;
-  int Opcode = MI.getOpcode();
-
-  // Don't bother trying if the next instruction is not an add or a sub.
-  if ((Opcode != AVR::SUBIWRdK) && (Opcode != AVR::ADIWRdK)) {
-    return;
-  }
-
-  // Check that DstReg matches with next instruction, otherwise the instruction
-  // is not related to stack address manipulation.
-  if (DstReg != MI.getOperand(0).getReg()) {
-    return;
-  }
-
-  // Add the offset in the next instruction to our offset.
-  switch (Opcode) {
-  case AVR::SUBIWRdK:
-    Offset += -MI.getOperand(2).getImm();
-    break;
-  case AVR::ADIWRdK:
-    Offset += MI.getOperand(2).getImm();
-    break;
-  }
-
-  // Finally remove the instruction.
-  II++;
-  MI.eraseFromParent();
-}
-
 bool AVRRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                           int SPAdj, unsigned FIOperandNum,
                                           RegScavenger *RS) const {
@@ -198,9 +166,8 @@ bool AVRRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     //  movw    r31:r30, r29:r28
     //  adiw    r31:r30, 45
     if (II != MBB.end())
-      foldFrameOffset(II, Offset, DstReg);
 
-    // Select the best opcode based on DstReg and the offset size.
+      // Select the best opcode based on DstReg and the offset size.
     switch (DstReg) {
     case AVR::R25R24:
     case AVR::R27R26:

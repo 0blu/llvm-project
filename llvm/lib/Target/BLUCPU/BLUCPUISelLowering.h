@@ -77,14 +77,12 @@ enum NodeType {
 
 } // end of namespace BLUCPUISD
 
-class BLUCPUSubtarget;
 class BLUCPUTargetMachine;
 
 /// Performs target lowering for the BLUCPU.
 class BLUCPUTargetLowering : public TargetLowering {
 public:
-  explicit BLUCPUTargetLowering(const BLUCPUTargetMachine &TM,
-                             const BLUCPUSubtarget &STI);
+  explicit BLUCPUTargetLowering(const BLUCPUTargetMachine &TM);
 
 public:
   MVT getScalarShiftAmountTy(const DataLayout &, EVT LHSTy) const override {
@@ -155,20 +153,6 @@ public:
   }
 
 private:
-  SDValue getBLUCPUCmp(SDValue LHS, SDValue RHS, ISD::CondCode CC, SDValue &BLUCPUcc,
-                    SelectionDAG &DAG, SDLoc dl) const;
-  SDValue getBLUCPUCmp(SDValue LHS, SDValue RHS, SelectionDAG &DAG,
-                    SDLoc dl) const;
-  SDValue LowerShifts(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerDivRem(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerINLINEASM(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerSETCC(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
-
   bool CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
                       bool isVarArg,
                       const SmallVectorImpl<ISD::OutputArg> &Outs,
@@ -191,20 +175,7 @@ private:
                           const SDLoc &dl, SelectionDAG &DAG,
                           SmallVectorImpl<SDValue> &InVals) const;
 
-protected:
-  const BLUCPUSubtarget &Subtarget;
-
 private:
-  MachineBasicBlock *insertShift(MachineInstr &MI, MachineBasicBlock *BB,
-                                 bool Tiny) const;
-  MachineBasicBlock *insertWideShift(MachineInstr &MI,
-                                     MachineBasicBlock *BB) const;
-  MachineBasicBlock *insertMul(MachineInstr &MI, MachineBasicBlock *BB) const;
-  MachineBasicBlock *insertCopyZero(MachineInstr &MI,
-                                    MachineBasicBlock *BB) const;
-  MachineBasicBlock *insertAtomicArithmeticOp(MachineInstr &MI,
-                                              MachineBasicBlock *BB,
-                                              unsigned Opcode, int Width) const;
 };
 
 } // end namespace llvm

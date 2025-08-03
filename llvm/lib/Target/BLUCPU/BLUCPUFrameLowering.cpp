@@ -29,6 +29,13 @@ namespace llvm {
 
 BLUCPUFrameLowering::BLUCPUFrameLowering()
     : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, Align(1), -2) {}
+void BLUCPUFrameLowering::emitPrologue(MachineFunction &MF,
+                                       MachineBasicBlock &MBB) const {}
+void BLUCPUFrameLowering::emitEpilogue(MachineFunction &MF,
+                                       MachineBasicBlock &MBB) const {}
+bool BLUCPUFrameLowering::hasFP(MachineFunction const &MF) const {
+  return true;
+}
 
 /// The frame analyzer pass.
 ///

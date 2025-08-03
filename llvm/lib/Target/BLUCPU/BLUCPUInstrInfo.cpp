@@ -35,97 +35,14 @@
 
 namespace llvm {
 
-BLUCPUInstrInfo::BLUCPUInstrInfo(BLUCPUSubtarget &STI)
-    : BLUCPUGenInstrInfo(BLUCPU::ADJCALLSTACKDOWN, BLUCPU::ADJCALLSTACKUP), RI(),
-      STI(STI) {}
-
-void BLUCPUInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
-                               MachineBasicBlock::iterator MI,
-                               const DebugLoc &DL, MCRegister DestReg,
-                               MCRegister SrcReg, bool KillSrc) const {
-  const BLUCPURegisterInfo &TRI = *STI.getRegisterInfo();
-  unsigned Opc;
-
-  if (BLUCPU::DREGSRegClass.contains(DestReg, SrcReg)) {
-    // If our BLUCPU has `movw`, let's emit that; otherwise let's emit two separate
-    // `mov`s.
-    if (STI.hasMOVW() && BLUCPU::DREGSMOVWRegClass.contains(DestReg, SrcReg)) {
-      BuildMI(MBB, MI, DL, get(BLUCPU::MOVWRdRr), DestReg)
-          .addReg(SrcReg, getKillRegState(KillSrc));
-    } else {
-      Register DestLo, DestHi, SrcLo, SrcHi;
-
-      TRI.splitReg(DestReg, DestLo, DestHi);
-      TRI.splitReg(SrcReg, SrcLo, SrcHi);
-
-      // Emit the copies.
-      // The original instruction was for a register pair, of which only one
-      // register might have been live. Add 'undef' to satisfy the machine
-      // verifier, when subreg liveness is enabled.
-      // TODO: Eliminate these unnecessary copies.
-      if (DestLo == SrcHi) {
-        BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestHi)
-            .addReg(SrcHi, getKillRegState(KillSrc) | RegState::Undef);
-        BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestLo)
-            .addReg(SrcLo, getKillRegState(KillSrc) | RegState::Undef);
-      } else {
-        BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestLo)
-            .addReg(SrcLo, getKillRegState(KillSrc) | RegState::Undef);
-        BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestHi)
-            .addReg(SrcHi, getKillRegState(KillSrc) | RegState::Undef);
-      }
-    }
-  } else {
-    if (BLUCPU::GPR8RegClass.contains(DestReg, SrcReg)) {
-      Opc = BLUCPU::MOVRdRr;
-    } else if (SrcReg == BLUCPU::SP && BLUCPU::DREGSRegClass.contains(DestReg)) {
-      Opc = BLUCPU::SPREAD;
-    } else if (DestReg == BLUCPU::SP && BLUCPU::DREGSRegClass.contains(SrcReg)) {
-      Opc = BLUCPU::SPWRITE;
-    } else {
-      llvm_unreachable("Impossible reg-to-reg copy");
-    }
-
-    BuildMI(MBB, MI, DL, get(Opc), DestReg)
-        .addReg(SrcReg, getKillRegState(KillSrc));
-  }
+void BLUCPUInstrInfo::copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, const DebugLoc &DL, MCRegister DestReg, MCRegister SrcReg, bool KillSrc) const {
 }
 
-Register BLUCPUInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
-                                           int &FrameIndex) const {
-  switch (MI.getOpcode()) {
-  case BLUCPU::LDDRdPtrQ:
-  case BLUCPU::LDDWRdYQ: { //: FIXME: remove this once PR13375 gets fixed
-    if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
-        MI.getOperand(2).getImm() == 0) {
-      FrameIndex = MI.getOperand(1).getIndex();
-      return MI.getOperand(0).getReg();
-    }
-    break;
-  }
-  default:
-    break;
-  }
-
+Register BLUCPUInstrInfo::isLoadFromStackSlot(const MachineInstr &MI, int &FrameIndex) const {
   return 0;
 }
 
-Register BLUCPUInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
-                                          int &FrameIndex) const {
-  switch (MI.getOpcode()) {
-  case BLUCPU::STDPtrQRr:
-  case BLUCPU::STDWPtrQRr: {
-    if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
-        MI.getOperand(1).getImm() == 0) {
-      FrameIndex = MI.getOperand(0).getIndex();
-      return MI.getOperand(2).getReg();
-    }
-    break;
-  }
-  default:
-    break;
-  }
-
+Register BLUCPUInstrInfo::isStoreToStackSlot(const MachineInstr &MI, int &FrameIndex) const {
   return 0;
 }
 
@@ -133,32 +50,6 @@ void BLUCPUInstrInfo::storeRegToStackSlot(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register SrcReg,
     bool isKill, int FrameIndex, const TargetRegisterClass *RC,
     const TargetRegisterInfo *TRI, Register VReg) const {
-  MachineFunction &MF = *MBB.getParent();
-  BLUCPUMachineFunctionInfo *AFI = MF.getInfo<BLUCPUMachineFunctionInfo>();
-
-  AFI->setHasSpills(true);
-
-  const MachineFrameInfo &MFI = MF.getFrameInfo();
-
-  MachineMemOperand *MMO = MF.getMachineMemOperand(
-      MachinePointerInfo::getFixedStack(MF, FrameIndex),
-      MachineMemOperand::MOStore, MFI.getObjectSize(FrameIndex),
-      MFI.getObjectAlign(FrameIndex));
-
-  unsigned Opcode = 0;
-  if (TRI->isTypeLegalForClass(*RC, MVT::i8)) {
-    Opcode = BLUCPU::STDPtrQRr;
-  } else if (TRI->isTypeLegalForClass(*RC, MVT::i16)) {
-    Opcode = BLUCPU::STDWPtrQRr;
-  } else {
-    llvm_unreachable("Cannot store this register into a stack slot!");
-  }
-
-  BuildMI(MBB, MI, DebugLoc(), get(Opcode))
-      .addFrameIndex(FrameIndex)
-      .addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill))
-      .addMemOperand(MMO);
 }
 
 void BLUCPUInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
@@ -167,75 +58,14 @@ void BLUCPUInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
                                         const TargetRegisterClass *RC,
                                         const TargetRegisterInfo *TRI,
                                         Register VReg) const {
-  MachineFunction &MF = *MBB.getParent();
-  const MachineFrameInfo &MFI = MF.getFrameInfo();
-
-  MachineMemOperand *MMO = MF.getMachineMemOperand(
-      MachinePointerInfo::getFixedStack(MF, FrameIndex),
-      MachineMemOperand::MOLoad, MFI.getObjectSize(FrameIndex),
-      MFI.getObjectAlign(FrameIndex));
-
-  unsigned Opcode = 0;
-  if (TRI->isTypeLegalForClass(*RC, MVT::i8)) {
-    Opcode = BLUCPU::LDDRdPtrQ;
-  } else if (TRI->isTypeLegalForClass(*RC, MVT::i16)) {
-    // Opcode = BLUCPU::LDDWRdPtrQ;
-    //: FIXME: remove this once PR13375 gets fixed
-    Opcode = BLUCPU::LDDWRdYQ;
-  } else {
-    llvm_unreachable("Cannot load this register from a stack slot!");
-  }
-
-  BuildMI(MBB, MI, DebugLoc(), get(Opcode), DestReg)
-      .addFrameIndex(FrameIndex)
-      .addImm(0)
-      .addMemOperand(MMO);
 }
 
 const MCInstrDesc &BLUCPUInstrInfo::getBrCond(BLUCPUCC::CondCodes CC) const {
-  switch (CC) {
-  default:
-    llvm_unreachable("Unknown condition code!");
-  case BLUCPUCC::COND_EQ:
-    return get(BLUCPU::BREQk);
-  case BLUCPUCC::COND_NE:
-    return get(BLUCPU::BRNEk);
-  case BLUCPUCC::COND_GE:
-    return get(BLUCPU::BRGEk);
-  case BLUCPUCC::COND_LT:
-    return get(BLUCPU::BRLTk);
-  case BLUCPUCC::COND_SH:
-    return get(BLUCPU::BRSHk);
-  case BLUCPUCC::COND_LO:
-    return get(BLUCPU::BRLOk);
-  case BLUCPUCC::COND_MI:
-    return get(BLUCPU::BRMIk);
-  case BLUCPUCC::COND_PL:
-    return get(BLUCPU::BRPLk);
-  }
+  llvm_unreachable("Unknown condition code!");
 }
 
 BLUCPUCC::CondCodes BLUCPUInstrInfo::getCondFromBranchOpc(unsigned Opc) const {
-  switch (Opc) {
-  default:
-    return BLUCPUCC::COND_INVALID;
-  case BLUCPU::BREQk:
-    return BLUCPUCC::COND_EQ;
-  case BLUCPU::BRNEk:
-    return BLUCPUCC::COND_NE;
-  case BLUCPU::BRSHk:
-    return BLUCPUCC::COND_SH;
-  case BLUCPU::BRLOk:
-    return BLUCPUCC::COND_LO;
-  case BLUCPU::BRMIk:
-    return BLUCPUCC::COND_MI;
-  case BLUCPU::BRPLk:
-    return BLUCPUCC::COND_PL;
-  case BLUCPU::BRGEk:
-    return BLUCPUCC::COND_GE;
-  case BLUCPU::BRLTk:
-    return BLUCPUCC::COND_LT;
-  }
+  return BLUCPUCC::COND_INVALID;
 }
 
 BLUCPUCC::CondCodes BLUCPUInstrInfo::getOppositeCondition(BLUCPUCC::CondCodes CC) const {
@@ -291,33 +121,33 @@ bool BLUCPUInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
 
     // Handle unconditional branches.
     //: TODO: add here jmp
-    if (I->getOpcode() == BLUCPU::RJMPk) {
-      UnCondBrIter = I;
-
-      if (!AllowModify) {
-        TBB = I->getOperand(0).getMBB();
-        continue;
-      }
-
-      // If the block has any instructions after a JMP, delete them.
-      MBB.erase(std::next(I), MBB.end());
-
-      Cond.clear();
-      FBB = nullptr;
-
-      // Delete the JMP if it's equivalent to a fall-through.
-      if (MBB.isLayoutSuccessor(I->getOperand(0).getMBB())) {
-        TBB = nullptr;
-        I->eraseFromParent();
-        I = MBB.end();
-        UnCondBrIter = MBB.end();
-        continue;
-      }
-
-      // TBB is used to indicate the unconditinal destination.
-      TBB = I->getOperand(0).getMBB();
-      continue;
-    }
+    // if (I->getOpcode() == BLUCPU::RJMPk) {
+    //   UnCondBrIter = I;
+    //
+    //   if (!AllowModify) {
+    //     TBB = I->getOperand(0).getMBB();
+    //     continue;
+    //   }
+    //
+    //   // If the block has any instructions after a JMP, delete them.
+    //   MBB.erase(std::next(I), MBB.end());
+    //
+    //   Cond.clear();
+    //   FBB = nullptr;
+    //
+    //   // Delete the JMP if it's equivalent to a fall-through.
+    //   if (MBB.isLayoutSuccessor(I->getOperand(0).getMBB())) {
+    //     TBB = nullptr;
+    //     I->eraseFromParent();
+    //     I = MBB.end();
+    //     UnCondBrIter = MBB.end();
+    //     continue;
+    //   }
+    //
+    //   // TBB is used to indicate the unconditinal destination.
+    //   TBB = I->getOperand(0).getMBB();
+    //   continue;
+    // }
 
     // Handle conditional branches.
     BLUCPUCC::CondCodes BranchCode = getCondFromBranchOpc(I->getOpcode());
@@ -353,8 +183,6 @@ bool BLUCPUInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
 
         BuildMI(MBB, UnCondBrIter, MBB.findDebugLoc(I), get(JNCC))
             .addMBB(UnCondBrIter->getOperand(0).getMBB());
-        BuildMI(MBB, UnCondBrIter, MBB.findDebugLoc(I), get(BLUCPU::RJMPk))
-            .addMBB(TargetBB);
 
         OldInst->eraseFromParent();
         UnCondBrIter->eraseFromParent();
@@ -409,9 +237,6 @@ unsigned BLUCPUInstrInfo::insertBranch(MachineBasicBlock &MBB,
 
   if (Cond.empty()) {
     assert(!FBB && "Unconditional branch with multiple successors!");
-    auto &MI = *BuildMI(&MBB, DL, get(BLUCPU::RJMPk)).addMBB(TBB);
-    if (BytesAdded)
-      *BytesAdded += getInstSizeInBytes(MI);
     return 1;
   }
 
@@ -426,9 +251,6 @@ unsigned BLUCPUInstrInfo::insertBranch(MachineBasicBlock &MBB,
 
   if (FBB) {
     // Two-way Conditional branch. Insert the second branch.
-    auto &MI = *BuildMI(&MBB, DL, get(BLUCPU::RJMPk)).addMBB(FBB);
-    if (BytesAdded)
-      *BytesAdded += getInstSizeInBytes(MI);
     ++Count;
   }
 
@@ -450,10 +272,6 @@ unsigned BLUCPUInstrInfo::removeBranch(MachineBasicBlock &MBB,
     }
     //: TODO: add here the missing jmp instructions once they are implemented
     // like jmp, {e}ijmp, and other cond branches, ...
-    if (I->getOpcode() != BLUCPU::RJMPk &&
-        getCondFromBranchOpc(I->getOpcode()) == BLUCPUCC::COND_INVALID) {
-      break;
-    }
 
     // Remove the branch.
     if (BytesRemoved)
@@ -495,66 +313,18 @@ unsigned BLUCPUInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
     const MachineFunction &MF = *MI.getParent()->getParent();
     const BLUCPUTargetMachine &TM =
         static_cast<const BLUCPUTargetMachine &>(MF.getTarget());
-    const TargetInstrInfo &TII = *STI.getInstrInfo();
-    return TII.getInlineAsmLength(MI.getOperand(0).getSymbolName(),
-                                  *TM.getMCAsmInfo());
   }
   }
 }
 
 MachineBasicBlock *
 BLUCPUInstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
-  switch (MI.getOpcode()) {
-  default:
     llvm_unreachable("unexpected opcode!");
-  case BLUCPU::JMPk:
-  case BLUCPU::CALLk:
-  case BLUCPU::RCALLk:
-  case BLUCPU::RJMPk:
-  case BLUCPU::BREQk:
-  case BLUCPU::BRNEk:
-  case BLUCPU::BRSHk:
-  case BLUCPU::BRLOk:
-  case BLUCPU::BRMIk:
-  case BLUCPU::BRPLk:
-  case BLUCPU::BRGEk:
-  case BLUCPU::BRLTk:
-    return MI.getOperand(0).getMBB();
-  case BLUCPU::BRBSsk:
-  case BLUCPU::BRBCsk:
-    return MI.getOperand(1).getMBB();
-  case BLUCPU::SBRCRrB:
-  case BLUCPU::SBRSRrB:
-  case BLUCPU::SBICAb:
-  case BLUCPU::SBISAb:
-    llvm_unreachable("unimplemented branch instructions");
-  }
 }
 
 bool BLUCPUInstrInfo::isBranchOffsetInRange(unsigned BranchOp,
                                          int64_t BrOffset) const {
-
-  switch (BranchOp) {
-  default:
-    llvm_unreachable("unexpected opcode!");
-  case BLUCPU::JMPk:
-  case BLUCPU::CALLk:
-    return STI.hasJMPCALL();
-  case BLUCPU::RCALLk:
-  case BLUCPU::RJMPk:
-    return isIntN(13, BrOffset);
-  case BLUCPU::BRBSsk:
-  case BLUCPU::BRBCsk:
-  case BLUCPU::BREQk:
-  case BLUCPU::BRNEk:
-  case BLUCPU::BRSHk:
-  case BLUCPU::BRLOk:
-  case BLUCPU::BRMIk:
-  case BLUCPU::BRPLk:
-  case BLUCPU::BRGEk:
-  case BLUCPU::BRLTk:
-    return isIntN(7, BrOffset);
-  }
+  return false;
 }
 
 void BLUCPUInstrInfo::insertIndirectBranch(MachineBasicBlock &MBB,
@@ -562,18 +332,6 @@ void BLUCPUInstrInfo::insertIndirectBranch(MachineBasicBlock &MBB,
                                         MachineBasicBlock &RestoreBB,
                                         const DebugLoc &DL, int64_t BrOffset,
                                         RegScavenger *RS) const {
-  // This method inserts a *direct* branch (JMP), despite its name.
-  // LLVM calls this method to fixup unconditional branches; it never calls
-  // insertBranch or some hypothetical "insertDirectBranch".
-  // See lib/CodeGen/RegisterRelaxation.cpp for details.
-  // We end up here when a jump is too long for a RJMP instruction.
-  if (STI.hasJMPCALL())
-    BuildMI(&MBB, DL, get(BLUCPU::JMPk)).addMBB(&NewDestBB);
-  else
-    // The RJMP may jump to a far place beyond its legal range. We let the
-    // linker to report 'out of range' rather than crash, or silently emit
-    // incorrect assembly code.
-    BuildMI(&MBB, DL, get(BLUCPU::RJMPk)).addMBB(&NewDestBB);
 }
 
 } // end of namespace llvm

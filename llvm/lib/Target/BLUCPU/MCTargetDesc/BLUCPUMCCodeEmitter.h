@@ -105,6 +105,24 @@ private:
   const MCInstrInfo &MCII;
   MCContext &Ctx;
 };
+inline void BLUCPUMCCodeEmitter::encodeInstruction(
+    const MCInst &MI, SmallVectorImpl<char> &CB,
+    SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI) const {
+
+}
+
+template <BLUCPU::Fixups Fixup>
+unsigned BLUCPUMCCodeEmitter::encodeRelCondBrTarget(const MCInst &MI, unsigned OpNo,
+                                           SmallVectorImpl<MCFixup> &Fixups,
+                                           const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  assert(MO.isImm());
+
+  // Take the size of the current instruction away.
+  // With labels, this is implicitly done.
+  auto target = MO.getImm();
+  return target;
+}
 
 } // namespace llvm
 

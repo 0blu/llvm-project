@@ -17,6 +17,9 @@ namespace llvm {
 class BLUCPUFrameLowering : public TargetFrameLowering {
 public:
   explicit BLUCPUFrameLowering();
+  void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
+  void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
+  bool hasFP(MachineFunction const &MF) const override;
 };
 
 } // end namespace llvm

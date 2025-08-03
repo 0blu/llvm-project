@@ -35,6 +35,7 @@
 
 #define GET_REGINFO_MC_DESC
 #include "BLUCPUGenRegisterInfo.inc"
+#include "BLUCPUMCCodeEmitter.h"
 
 using namespace llvm;
 
@@ -43,6 +44,10 @@ MCInstrInfo *llvm::createBLUCPUMCInstrInfo() {
   InitBLUCPUMCInstrInfo(X);
 
   return X;
+}
+MCCodeEmitter *llvm::createBLUCPUMCCodeEmitter(const MCInstrInfo &MCII,
+                                               MCContext &Ctx) {
+  return new BLUCPUMCCodeEmitter(MCII, Ctx);
 }
 
 static MCRegisterInfo *createBLUCPUMCRegisterInfo(const Triple &TT) {

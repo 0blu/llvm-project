@@ -20,7 +20,6 @@
 #include "BLUCPUISelLowering.h"
 #include "BLUCPUInstrInfo.h"
 #include "BLUCPUSelectionDAGInfo.h"
-#include "BLUCPUSubtarget.h"
 
 #include <optional>
 
@@ -35,8 +34,7 @@ public:
                    std::optional<CodeModel::Model> CM, CodeGenOptLevel OL,
                    bool JIT);
 
-  const BLUCPUSubtarget *getSubtargetImpl() const;
-  const BLUCPUSubtarget *getSubtargetImpl(const Function &) const override;
+  const TargetSubtargetInfo *getSubtargetImpl(const Function &) const override;
 
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return this->TLOF.get();
@@ -59,7 +57,6 @@ public:
 
 private:
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
-  BLUCPUSubtarget SubTarget;
 };
 
 } // end namespace llvm

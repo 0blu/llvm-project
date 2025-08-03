@@ -1200,103 +1200,14 @@ static const MCPhysReg RegList8AVR[] = {
     AVR::R25, AVR::R24, AVR::R23, AVR::R22, AVR::R21, AVR::R20,
     AVR::R19, AVR::R18, AVR::R17, AVR::R16, AVR::R15, AVR::R14,
     AVR::R13, AVR::R12, AVR::R11, AVR::R10, AVR::R9,  AVR::R8};
-static const MCPhysReg RegList8Tiny[] = {AVR::R25, AVR::R24, AVR::R23,
-                                         AVR::R22, AVR::R21, AVR::R20};
 static const MCPhysReg RegList16AVR[] = {
     AVR::R26R25, AVR::R25R24, AVR::R24R23, AVR::R23R22, AVR::R22R21,
     AVR::R21R20, AVR::R20R19, AVR::R19R18, AVR::R18R17, AVR::R17R16,
     AVR::R16R15, AVR::R15R14, AVR::R14R13, AVR::R13R12, AVR::R12R11,
     AVR::R11R10, AVR::R10R9,  AVR::R9R8};
-static const MCPhysReg RegList16Tiny[] = {AVR::R26R25, AVR::R25R24,
-                                          AVR::R24R23, AVR::R23R22,
-                                          AVR::R22R21, AVR::R21R20};
 
 static_assert(std::size(RegList8AVR) == std::size(RegList16AVR),
               "8-bit and 16-bit register arrays must be of equal length");
-static_assert(std::size(RegList8Tiny) == std::size(RegList16Tiny),
-              "8-bit and 16-bit register arrays must be of equal length");
-
-/// Analyze incoming and outgoing function arguments. We need custom C++ code
-/// to handle special constraints in the ABI.
-/// In addition, all pieces of a certain argument have to be passed either
-/// using registers or the stack but never mixing both.
-template <typename ArgT>
-static void analyzeArguments(TargetLowering::CallLoweringInfo *CLI,
-                             const Function *F, const DataLayout *TD,
-                             const SmallVectorImpl<ArgT> &Args,
-                             SmallVectorImpl<CCValAssign> &ArgLocs,
-                             CCState &CCInfo, bool Tiny) {
-  // Choose the proper register list for argument passing according to the ABI.
-  ArrayRef<MCPhysReg> RegList8;
-  ArrayRef<MCPhysReg> RegList16;
-  if (Tiny) {
-    RegList8 = ArrayRef(RegList8Tiny);
-    RegList16 = ArrayRef(RegList16Tiny);
-  } else {
-    RegList8 = ArrayRef(RegList8AVR);
-    RegList16 = ArrayRef(RegList16AVR);
-  }
-
-  unsigned NumArgs = Args.size();
-  // This is the index of the last used register, in RegList*.
-  // -1 means R26 (R26 is never actually used in CC).
-  int RegLastIdx = -1;
-  // Once a value is passed to the stack it will always be used
-  bool UseStack = false;
-  for (unsigned i = 0; i != NumArgs;) {
-    MVT VT = Args[i].VT;
-    // We have to count the number of bytes for each function argument, that is
-    // those Args with the same OrigArgIndex. This is important in case the
-    // function takes an aggregate type.
-    // Current argument will be between [i..j).
-    unsigned ArgIndex = Args[i].OrigArgIndex;
-    unsigned TotalBytes = VT.getStoreSize();
-    unsigned j = i + 1;
-    for (; j != NumArgs; ++j) {
-      if (Args[j].OrigArgIndex != ArgIndex)
-        break;
-      TotalBytes += Args[j].VT.getStoreSize();
-    }
-    // Round up to even number of bytes.
-    TotalBytes = alignTo(TotalBytes, 2);
-    // Skip zero sized arguments
-    if (TotalBytes == 0)
-      continue;
-    // The index of the first register to be used
-    unsigned RegIdx = RegLastIdx + TotalBytes;
-    RegLastIdx = RegIdx;
-    // If there are not enough registers, use the stack
-    if (RegIdx >= RegList8.size()) {
-      UseStack = true;
-    }
-    for (; i != j; ++i) {
-      MVT VT = Args[i].VT;
-
-      if (UseStack) {
-        auto evt = EVT(VT).getTypeForEVT(CCInfo.getContext());
-        unsigned Offset = CCInfo.AllocateStack(TD->getTypeAllocSize(evt),
-                                               TD->getABITypeAlign(evt));
-        CCInfo.addLoc(
-            CCValAssign::getMem(i, VT, Offset, VT, CCValAssign::Full));
-      } else {
-        unsigned Reg;
-        if (VT == MVT::i8) {
-          Reg = CCInfo.AllocateReg(RegList8[RegIdx]);
-        } else if (VT == MVT::i16) {
-          Reg = CCInfo.AllocateReg(RegList16[RegIdx]);
-        } else {
-          llvm_unreachable(
-              "calling convention can only manage i8 and i16 types");
-        }
-        assert(Reg && "register not available in calling convention");
-        CCInfo.addLoc(CCValAssign::getReg(i, VT, Reg, VT, CCValAssign::Full));
-        // Registers inside a particular argument are sorted in increasing order
-        // (remember the array is reversed).
-        RegIdx -= VT.getStoreSize();
-      }
-    }
-  }
-}
 
 /// Count the total number of bytes needed to pass or return these arguments.
 template <typename ArgT>
@@ -1308,60 +1219,6 @@ getTotalArgumentsSizeInBytes(const SmallVectorImpl<ArgT> &Args) {
     TotalBytes += Arg.VT.getStoreSize();
   }
   return TotalBytes;
-}
-
-/// Analyze incoming and outgoing value of returning from a function.
-/// The algorithm is similar to analyzeArguments, but there can only be
-/// one value, possibly an aggregate, and it is limited to 8 bytes.
-template <typename ArgT>
-static void analyzeReturnValues(const SmallVectorImpl<ArgT> &Args,
-                                CCState &CCInfo, bool Tiny) {
-  unsigned NumArgs = Args.size();
-  unsigned TotalBytes = getTotalArgumentsSizeInBytes(Args);
-  // CanLowerReturn() guarantees this assertion.
-  if (Tiny)
-    assert(TotalBytes <= 4 &&
-           "return values greater than 4 bytes cannot be lowered on AVRTiny");
-  else
-    assert(TotalBytes <= 8 &&
-           "return values greater than 8 bytes cannot be lowered on AVR");
-
-  // Choose the proper register list for argument passing according to the ABI.
-  ArrayRef<MCPhysReg> RegList8;
-  ArrayRef<MCPhysReg> RegList16;
-  if (Tiny) {
-    RegList8 = ArrayRef(RegList8Tiny);
-    RegList16 = ArrayRef(RegList16Tiny);
-  } else {
-    RegList8 = ArrayRef(RegList8AVR);
-    RegList16 = ArrayRef(RegList16AVR);
-  }
-
-  // GCC-ABI says that the size is rounded up to the next even number,
-  // but actually once it is more than 4 it will always round up to 8.
-  if (TotalBytes > 4) {
-    TotalBytes = 8;
-  } else {
-    TotalBytes = alignTo(TotalBytes, 2);
-  }
-
-  // The index of the first register to use.
-  int RegIdx = TotalBytes - 1;
-  for (unsigned i = 0; i != NumArgs; ++i) {
-    MVT VT = Args[i].VT;
-    unsigned Reg;
-    if (VT == MVT::i8) {
-      Reg = CCInfo.AllocateReg(RegList8[RegIdx]);
-    } else if (VT == MVT::i16) {
-      Reg = CCInfo.AllocateReg(RegList16[RegIdx]);
-    } else {
-      llvm_unreachable("calling convention can only manage i8 and i16 types");
-    }
-    assert(Reg && "register not available in calling convention");
-    CCInfo.addLoc(CCValAssign::getReg(i, VT, Reg, VT, CCValAssign::Full));
-    // Registers sort in increasing order
-    RegIdx -= VT.getStoreSize();
-  }
 }
 
 SDValue AVRTargetLowering::LowerFormalArguments(
@@ -1381,8 +1238,6 @@ SDValue AVRTargetLowering::LowerFormalArguments(
   if (isVarArg) {
     CCInfo.AnalyzeFormalArguments(Ins, ArgCC_AVR_Vararg);
   } else {
-    analyzeArguments(nullptr, &MF.getFunction(), &DL, Ins, ArgLocs, CCInfo,
-                     Subtarget.hasTinyEncoding());
   }
 
   SDValue ArgValue;
@@ -1507,8 +1362,6 @@ SDValue AVRTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   if (isVarArg) {
     CCInfo.AnalyzeCallOperands(Outs, ArgCC_AVR_Vararg);
   } else {
-    analyzeArguments(&CLI, F, &DAG.getDataLayout(), Outs, ArgLocs, CCInfo,
-                     Subtarget.hasTinyEncoding());
   }
 
   // Get a count of how many bytes are to be pushed on the stack.
@@ -1656,7 +1509,6 @@ SDValue AVRTargetLowering::LowerCallResult(
   if (CallConv == CallingConv::AVR_BUILTIN) {
     CCInfo.AnalyzeCallResult(Ins, RetCC_AVR_BUILTIN);
   } else {
-    analyzeReturnValues(Ins, CCInfo, Subtarget.hasTinyEncoding());
   }
 
   // Copy all of the result registers out of their specified physreg.
@@ -1707,7 +1559,6 @@ AVRTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   if (CallConv == CallingConv::AVR_BUILTIN) {
     CCInfo.AnalyzeReturn(Outs, RetCC_AVR_BUILTIN);
   } else {
-    analyzeReturnValues(Outs, CCInfo, Subtarget.hasTinyEncoding());
   }
 
   SDValue Glue;
@@ -1889,282 +1740,6 @@ MachineBasicBlock *AVRTargetLowering::insertShift(MachineInstr &MI,
   return RemBB;
 }
 
-// Do a multibyte AVR shift. Insert shift instructions and put the output
-// registers in the Regs array.
-// Because AVR does not have a normal shift instruction (only a single bit shift
-// instruction), we have to emulate this behavior with other instructions.
-// It first tries large steps (moving registers around) and then smaller steps
-// like single bit shifts.
-// Large shifts actually reduce the number of shifted registers, so the below
-// algorithms have to work independently of the number of registers that are
-// shifted.
-// For more information and background, see this blogpost:
-// https://aykevl.nl/2021/02/avr-bitshift
-static void insertMultibyteShift(MachineInstr &MI, MachineBasicBlock *BB,
-                                 MutableArrayRef<std::pair<Register, int>> Regs,
-                                 ISD::NodeType Opc, int64_t ShiftAmt) {
-  const TargetInstrInfo &TII = *BB->getParent()->getSubtarget().getInstrInfo();
-  const AVRSubtarget &STI = BB->getParent()->getSubtarget<AVRSubtarget>();
-  MachineRegisterInfo &MRI = BB->getParent()->getRegInfo();
-  const DebugLoc &dl = MI.getDebugLoc();
-
-  const bool ShiftLeft = Opc == ISD::SHL;
-  const bool ArithmeticShift = Opc == ISD::SRA;
-
-  // Zero a register, for use in later operations.
-  Register ZeroReg = MRI.createVirtualRegister(&AVR::GPR8RegClass);
-  BuildMI(*BB, MI, dl, TII.get(AVR::COPY), ZeroReg)
-      .addReg(STI.getZeroRegister());
-
-  // Do a shift modulo 6 or 7. This is a bit more complicated than most shifts
-  // and is hard to compose with the rest, so these are special cased.
-  // The basic idea is to shift one or two bits in the opposite direction and
-  // then move registers around to get the correct end result.
-  if (ShiftLeft && (ShiftAmt % 8) >= 6) {
-    // Left shift modulo 6 or 7.
-
-    // Create a slice of the registers we're going to modify, to ease working
-    // with them.
-    size_t ShiftRegsOffset = ShiftAmt / 8;
-    size_t ShiftRegsSize = Regs.size() - ShiftRegsOffset;
-    MutableArrayRef<std::pair<Register, int>> ShiftRegs =
-        Regs.slice(ShiftRegsOffset, ShiftRegsSize);
-
-    // Shift one to the right, keeping the least significant bit as the carry
-    // bit.
-    insertMultibyteShift(MI, BB, ShiftRegs, ISD::SRL, 1);
-
-    // Rotate the least significant bit from the carry bit into a new register
-    // (that starts out zero).
-    Register LowByte = MRI.createVirtualRegister(&AVR::GPR8RegClass);
-    BuildMI(*BB, MI, dl, TII.get(AVR::RORRd), LowByte).addReg(ZeroReg);
-
-    // Shift one more to the right if this is a modulo-6 shift.
-    if (ShiftAmt % 8 == 6) {
-      insertMultibyteShift(MI, BB, ShiftRegs, ISD::SRL, 1);
-      Register NewLowByte = MRI.createVirtualRegister(&AVR::GPR8RegClass);
-      BuildMI(*BB, MI, dl, TII.get(AVR::RORRd), NewLowByte).addReg(LowByte);
-      LowByte = NewLowByte;
-    }
-
-    // Move all registers to the left, zeroing the bottom registers as needed.
-    for (size_t I = 0; I < Regs.size(); I++) {
-      int ShiftRegsIdx = I + 1;
-      if (ShiftRegsIdx < (int)ShiftRegs.size()) {
-        Regs[I] = ShiftRegs[ShiftRegsIdx];
-      } else if (ShiftRegsIdx == (int)ShiftRegs.size()) {
-        Regs[I] = std::pair(LowByte, 0);
-      } else {
-        Regs[I] = std::pair(ZeroReg, 0);
-      }
-    }
-
-    return;
-  }
-
-  // Right shift modulo 6 or 7.
-  if (!ShiftLeft && (ShiftAmt % 8) >= 6) {
-    // Create a view on the registers we're going to modify, to ease working
-    // with them.
-    size_t ShiftRegsSize = Regs.size() - (ShiftAmt / 8);
-    MutableArrayRef<std::pair<Register, int>> ShiftRegs =
-        Regs.slice(0, ShiftRegsSize);
-
-    // Shift one to the left.
-    insertMultibyteShift(MI, BB, ShiftRegs, ISD::SHL, 1);
-
-    // Sign or zero extend the most significant register into a new register.
-    // The HighByte is the byte that still has one (or two) bits from the
-    // original value. The ExtByte is purely a zero/sign extend byte (all bits
-    // are either 0 or 1).
-    Register HighByte = MRI.createVirtualRegister(&AVR::GPR8RegClass);
-    Register ExtByte = 0;
-    if (ArithmeticShift) {
-      // Sign-extend bit that was shifted out last.
-      BuildMI(*BB, MI, dl, TII.get(AVR::SBCRdRr), HighByte)
-          .addReg(HighByte, RegState::Undef)
-          .addReg(HighByte, RegState::Undef);
-      ExtByte = HighByte;
-      // The highest bit of the original value is the same as the zero-extend
-      // byte, so HighByte and ExtByte are the same.
-    } else {
-      // Use the zero register for zero extending.
-      ExtByte = ZeroReg;
-      // Rotate most significant bit into a new register (that starts out zero).
-      BuildMI(*BB, MI, dl, TII.get(AVR::ADCRdRr), HighByte)
-          .addReg(ExtByte)
-          .addReg(ExtByte);
-    }
-
-    // Shift one more to the left for modulo 6 shifts.
-    if (ShiftAmt % 8 == 6) {
-      insertMultibyteShift(MI, BB, ShiftRegs, ISD::SHL, 1);
-      // Shift the topmost bit into the HighByte.
-      Register NewExt = MRI.createVirtualRegister(&AVR::GPR8RegClass);
-      BuildMI(*BB, MI, dl, TII.get(AVR::ADCRdRr), NewExt)
-          .addReg(HighByte)
-          .addReg(HighByte);
-      HighByte = NewExt;
-    }
-
-    // Move all to the right, while sign or zero extending.
-    for (int I = Regs.size() - 1; I >= 0; I--) {
-      int ShiftRegsIdx = I - (Regs.size() - ShiftRegs.size()) - 1;
-      if (ShiftRegsIdx >= 0) {
-        Regs[I] = ShiftRegs[ShiftRegsIdx];
-      } else if (ShiftRegsIdx == -1) {
-        Regs[I] = std::pair(HighByte, 0);
-      } else {
-        Regs[I] = std::pair(ExtByte, 0);
-      }
-    }
-
-    return;
-  }
-
-  // For shift amounts of at least one register, simply rename the registers and
-  // zero the bottom registers.
-  while (ShiftLeft && ShiftAmt >= 8) {
-    // Move all registers one to the left.
-    for (size_t I = 0; I < Regs.size() - 1; I++) {
-      Regs[I] = Regs[I + 1];
-    }
-
-    // Zero the least significant register.
-    Regs[Regs.size() - 1] = std::pair(ZeroReg, 0);
-
-    // Continue shifts with the leftover registers.
-    Regs = Regs.drop_back(1);
-
-    ShiftAmt -= 8;
-  }
-
-  // And again, the same for right shifts.
-  Register ShrExtendReg = 0;
-  if (!ShiftLeft && ShiftAmt >= 8) {
-    if (ArithmeticShift) {
-      // Sign extend the most significant register into ShrExtendReg.
-      ShrExtendReg = MRI.createVirtualRegister(&AVR::GPR8RegClass);
-      Register Tmp = MRI.createVirtualRegister(&AVR::GPR8RegClass);
-      BuildMI(*BB, MI, dl, TII.get(AVR::ADDRdRr), Tmp)
-          .addReg(Regs[0].first, 0, Regs[0].second)
-          .addReg(Regs[0].first, 0, Regs[0].second);
-      BuildMI(*BB, MI, dl, TII.get(AVR::SBCRdRr), ShrExtendReg)
-          .addReg(Tmp)
-          .addReg(Tmp);
-    } else {
-      ShrExtendReg = ZeroReg;
-    }
-    for (; ShiftAmt >= 8; ShiftAmt -= 8) {
-      // Move all registers one to the right.
-      for (size_t I = Regs.size() - 1; I != 0; I--) {
-        Regs[I] = Regs[I - 1];
-      }
-
-      // Zero or sign extend the most significant register.
-      Regs[0] = std::pair(ShrExtendReg, 0);
-
-      // Continue shifts with the leftover registers.
-      Regs = Regs.drop_front(1);
-    }
-  }
-
-  // The bigger shifts are already handled above.
-  assert((ShiftAmt < 8) && "Unexpect shift amount");
-
-  // Shift by four bits, using a complicated swap/eor/andi/eor sequence.
-  // It only works for logical shifts because the bits shifted in are all
-  // zeroes.
-  // To shift a single byte right, it produces code like this:
-  //   swap r0
-  //   andi r0, 0x0f
-  // For a two-byte (16-bit) shift, it adds the following instructions to shift
-  // the upper byte into the lower byte:
-  //   swap r1
-  //   eor r0, r1
-  //   andi r1, 0x0f
-  //   eor r0, r1
-  // For bigger shifts, it repeats the above sequence. For example, for a 3-byte
-  // (24-bit) shift it adds:
-  //   swap r2
-  //   eor r1, r2
-  //   andi r2, 0x0f
-  //   eor r1, r2
-  if (!ArithmeticShift && ShiftAmt >= 4) {
-    Register Prev = 0;
-    for (size_t I = 0; I < Regs.size(); I++) {
-      size_t Idx = ShiftLeft ? I : Regs.size() - I - 1;
-      Register SwapReg = MRI.createVirtualRegister(&AVR::LD8RegClass);
-      BuildMI(*BB, MI, dl, TII.get(AVR::SWAPRd), SwapReg)
-          .addReg(Regs[Idx].first, 0, Regs[Idx].second);
-      if (I != 0) {
-        Register R = MRI.createVirtualRegister(&AVR::GPR8RegClass);
-        BuildMI(*BB, MI, dl, TII.get(AVR::EORRdRr), R)
-            .addReg(Prev)
-            .addReg(SwapReg);
-        Prev = R;
-      }
-      Register AndReg = MRI.createVirtualRegister(&AVR::LD8RegClass);
-      BuildMI(*BB, MI, dl, TII.get(AVR::ANDIRdK), AndReg)
-          .addReg(SwapReg)
-          .addImm(ShiftLeft ? 0xf0 : 0x0f);
-      if (I != 0) {
-        Register R = MRI.createVirtualRegister(&AVR::GPR8RegClass);
-        BuildMI(*BB, MI, dl, TII.get(AVR::EORRdRr), R)
-            .addReg(Prev)
-            .addReg(AndReg);
-        size_t PrevIdx = ShiftLeft ? Idx - 1 : Idx + 1;
-        Regs[PrevIdx] = std::pair(R, 0);
-      }
-      Prev = AndReg;
-      Regs[Idx] = std::pair(AndReg, 0);
-    }
-    ShiftAmt -= 4;
-  }
-
-  // Shift by one. This is the fallback that always works, and the shift
-  // operation that is used for 1, 2, and 3 bit shifts.
-  while (ShiftLeft && ShiftAmt) {
-    // Shift one to the left.
-    for (ssize_t I = Regs.size() - 1; I >= 0; I--) {
-      Register Out = MRI.createVirtualRegister(&AVR::GPR8RegClass);
-      Register In = Regs[I].first;
-      Register InSubreg = Regs[I].second;
-      if (I == (ssize_t)Regs.size() - 1) { // first iteration
-        BuildMI(*BB, MI, dl, TII.get(AVR::ADDRdRr), Out)
-            .addReg(In, 0, InSubreg)
-            .addReg(In, 0, InSubreg);
-      } else {
-        BuildMI(*BB, MI, dl, TII.get(AVR::ADCRdRr), Out)
-            .addReg(In, 0, InSubreg)
-            .addReg(In, 0, InSubreg);
-      }
-      Regs[I] = std::pair(Out, 0);
-    }
-    ShiftAmt--;
-  }
-  while (!ShiftLeft && ShiftAmt) {
-    // Shift one to the right.
-    for (size_t I = 0; I < Regs.size(); I++) {
-      Register Out = MRI.createVirtualRegister(&AVR::GPR8RegClass);
-      Register In = Regs[I].first;
-      Register InSubreg = Regs[I].second;
-      if (I == 0) {
-        unsigned Opc = ArithmeticShift ? AVR::ASRRd : AVR::LSRRd;
-        BuildMI(*BB, MI, dl, TII.get(Opc), Out).addReg(In, 0, InSubreg);
-      } else {
-        BuildMI(*BB, MI, dl, TII.get(AVR::RORRd), Out).addReg(In, 0, InSubreg);
-      }
-      Regs[I] = std::pair(Out, 0);
-    }
-    ShiftAmt--;
-  }
-
-  if (ShiftAmt != 0) {
-    llvm_unreachable("don't know how to shift!"); // sanity check
-  }
-}
-
 // Do a wide (32-bit) shift.
 MachineBasicBlock *
 AVRTargetLowering::insertWideShift(MachineInstr &MI,
@@ -2195,9 +1770,6 @@ AVRTargetLowering::insertWideShift(MachineInstr &MI,
       std::pair(MI.getOperand(2).getReg(), AVR::sub_hi),
       std::pair(MI.getOperand(2).getReg(), AVR::sub_lo),
   };
-
-  // Do the shift. The registers are modified in-place.
-  insertMultibyteShift(MI, BB, Registers, Opc, ShiftAmt);
 
   // Combine the 8-bit registers into 16-bit register pairs.
   // This done either from LSB to MSB or from MSB to LSB, depending on the

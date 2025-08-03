@@ -33,7 +33,7 @@ static const char *BLUCPUDataLayout =
 /// Processes a CPU name.
 static StringRef getCPU(StringRef CPU) {
   if (CPU.empty() || CPU == "generic") {
-    return "blucpu2";
+    return "blucpu";
   }
 
   return CPU;
@@ -51,8 +51,7 @@ BLUCPUTargetMachine::BLUCPUTargetMachine(const Target &T, const Triple &TT,
                                    CodeGenOptLevel OL, bool JIT)
     : LLVMTargetMachine(T, BLUCPUDataLayout, TT, getCPU(CPU), FS, Options,
                         getEffectiveRelocModel(RM),
-                        getEffectiveCodeModel(CM, CodeModel::Small), OL),
-      SubTarget(TT, std::string(getCPU(CPU)), std::string(FS), *this) {
+                        getEffectiveCodeModel(CM, CodeModel::Small), OL) {
   this->TLOF = std::make_unique<BLUCPUTargetObjectFile>();
   initAsmInfo();
 }
@@ -98,12 +97,8 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeBLUCPUTarget() {
   initializeBLUCPUDAGToDAGISelLegacyPass(PR);
 }
 
-const BLUCPUSubtarget *BLUCPUTargetMachine::getSubtargetImpl() const {
-  return &SubTarget;
-}
-
-const BLUCPUSubtarget *BLUCPUTargetMachine::getSubtargetImpl(const Function &) const {
-  return &SubTarget;
+const TargetSubtargetInfo* BLUCPUTargetMachine::getSubtargetImpl(const Function &) const {
+  return nullptr;
 }
 
 MachineFunctionInfo *BLUCPUTargetMachine::createMachineFunctionInfo(

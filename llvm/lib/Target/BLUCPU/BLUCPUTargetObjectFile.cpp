@@ -43,23 +43,23 @@ MCSection *BLUCPUTargetObjectFile::SelectSectionForGlobal(
   if (BLUCPU::isProgramMemoryAddress(GO) && !GO->hasSection() &&
       Kind.isReadOnly()) {
     // The BLUCPU subtarget should support LPM to access section '.progmem*.data'.
-    if (!BLUCPUTM.getSubtargetImpl()->hasLPM()) {
-      // TODO: Get the global object's location in source file.
-      getContext().reportError(
-          SMLoc(),
-          "Current BLUCPU subtarget does not support accessing program memory");
-      return Base::SelectSectionForGlobal(GO, Kind, TM);
-    }
-    // The BLUCPU subtarget should support ELPM to access section
-    // '.progmem[1|2|3|4|5].data'.
-    if (!BLUCPUTM.getSubtargetImpl()->hasELPM() &&
-        BLUCPU::getAddressSpace(GO) != BLUCPU::ProgramMemory) {
-      // TODO: Get the global object's location in source file.
-      getContext().reportError(SMLoc(),
-                               "Current BLUCPU subtarget does not support "
-                               "accessing extended program memory");
-      return ProgmemDataSection;
-    }
+    // if (!BLUCPUTM.getSubtargetImpl()->hasLPM()) {
+    //   // TODO: Get the global object's location in source file.
+    //   getContext().reportError(
+    //       SMLoc(),
+    //       "Current BLUCPU subtarget does not support accessing program memory");
+    //   return Base::SelectSectionForGlobal(GO, Kind, TM);
+    // }
+    // // The BLUCPU subtarget should support ELPM to access section
+    // // '.progmem[1|2|3|4|5].data'.
+    // if (!BLUCPUTM.getSubtargetImpl()->hasELPM() &&
+    //     BLUCPU::getAddressSpace(GO) != BLUCPU::ProgramMemory) {
+    //   // TODO: Get the global object's location in source file.
+    //   getContext().reportError(SMLoc(),
+    //                            "Current BLUCPU subtarget does not support "
+    //                            "accessing extended program memory");
+    //   return ProgmemDataSection;
+    // }
     switch (BLUCPU::getAddressSpace(GO)) {
     case BLUCPU::ProgramMemory: // address space 1
       return ProgmemDataSection;

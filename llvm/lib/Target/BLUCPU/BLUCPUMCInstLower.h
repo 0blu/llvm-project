@@ -9,7 +9,6 @@
 #ifndef LLVM_BLUCPU_MCINST_LOWER_H
 #define LLVM_BLUCPU_MCINST_LOWER_H
 
-#include "BLUCPUSubtarget.h"
 #include "llvm/Support/Compiler.h"
 
 namespace llvm {
@@ -30,8 +29,6 @@ public:
 
   /// Lowers a `MachineInstr` into a `MCInst`.
   void lowerInstruction(const MachineInstr &MI, MCInst &OutMI) const;
-  MCOperand lowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym,
-                               const BLUCPUSubtarget &Subtarget) const;
 
 private:
   MCContext &Ctx;

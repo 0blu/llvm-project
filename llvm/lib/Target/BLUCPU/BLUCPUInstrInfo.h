@@ -23,7 +23,6 @@
 
 namespace llvm {
 
-class BLUCPUSubtarget;
 
 namespace BLUCPUCC {
 
@@ -65,7 +64,7 @@ enum TOF {
 /// Utilities related to the BLUCPU instruction set.
 class BLUCPUInstrInfo : public BLUCPUGenInstrInfo {
 public:
-  explicit BLUCPUInstrInfo(BLUCPUSubtarget &STI);
+  explicit BLUCPUInstrInfo();
 
   const BLUCPURegisterInfo &getRegisterInfo() const { return RI; }
   const MCInstrDesc &getBrCond(BLUCPUCC::CondCodes CC) const;
@@ -119,8 +118,6 @@ public:
 private:
   const BLUCPURegisterInfo RI;
 
-protected:
-  const BLUCPUSubtarget &STI;
 };
 
 } // end namespace llvm

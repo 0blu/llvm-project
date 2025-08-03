@@ -1248,8 +1248,7 @@ TargetLoweringBase::findRepresentativeClass(const TargetRegisterInfo *TRI,
 
 /// computeRegisterProperties - Once all of the register classes are added,
 /// this allows us to compute derived properties we expose.
-void TargetLoweringBase::computeRegisterProperties(
-    const TargetRegisterInfo *TRI) {
+void TargetLoweringBase::computeRegisterProperties(const TargetRegisterInfo *TRI) {
   // Everything defaults to needing one register.
   for (unsigned i = 0; i != MVT::VALUETYPE_SIZE; ++i) {
     NumRegistersForVT[i] = 1;
