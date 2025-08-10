@@ -1,6 +1,7 @@
 add_llvm_component_library(LLVMBLUCPUDesc
     BLUCPUMCTargetDesc.cpp
     BLUCPUMCAsmInfo.cpp
+    BLUCPUInstPrinter.cpp
 
     LINK_COMPONENTS
     MC

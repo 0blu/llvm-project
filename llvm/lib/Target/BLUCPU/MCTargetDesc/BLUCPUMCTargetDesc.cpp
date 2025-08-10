@@ -1,5 +1,6 @@
 #include "BLUCPUMCTargetDesc.h"
 
+#include "BLUCPUInstPrinter.h"
 #include "BLUCPUMCAsmInfo.h"
 #include "TargetInfo/BLUCPUTargetInfo.h"
 
@@ -15,7 +16,6 @@
 using namespace llvm;
 
 #define GET_REGINFO_MC_DESC
-#define GET_REGINFO_ENUM
 #include "BLUCPUGenRegisterInfo.inc"
 
 #define GET_INSTRINFO_MC_DESC
@@ -31,6 +31,18 @@ static MCInstrInfo* createBLUCPUMCInstructionInfo() {
   return X;
 }
 
+static MCInstPrinter* createBLUCPUMCInstPrinter(const Triple &T,
+                                             unsigned SyntaxVariant,
+                                             const MCAsmInfo &MAI,
+                                             const MCInstrInfo &MII,
+                                             const MCRegisterInfo &MRI) {
+  if (SyntaxVariant == 0) {
+    return new BLUCPUInstPrinter(MAI, MII, MRI);
+  }
+
+  return nullptr;
+}
+
 static MCRegisterInfo* createBLUCPUMCRegisterInfo(const Triple &TT) {
   MCRegisterInfo* X = new MCRegisterInfo();
   InitBLUCPUMCRegisterInfo(X, 0);
@@ -38,7 +50,7 @@ static MCRegisterInfo* createBLUCPUMCRegisterInfo(const Triple &TT) {
 }
 
 static MCSubtargetInfo* createBLUCPUMCSubtargetInfo(const Triple& TT, StringRef CPU, StringRef FS) {
-  const StringRef TuneCPU = CPU;
+  const StringRef TuneCPU = "generic"; // TODO
   return createBLUCPUMCSubtargetInfoImpl(TT, CPU, TuneCPU, FS);
 }
 
@@ -47,6 +59,6 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeBLUCPUTargetMC() {
 
   TargetRegistry::RegisterMCSubtargetInfo(getTheBLUCPUTarget(), createBLUCPUMCSubtargetInfo);
   TargetRegistry::RegisterMCInstrInfo(getTheBLUCPUTarget(), createBLUCPUMCInstructionInfo);
-  // TargetRegistry::RegisterMCAsmInfo(getTheBLUCPUTarget(), createBLUCPUMCAsmInfo);
+  TargetRegistry::RegisterMCInstPrinter(getTheBLUCPUTarget(), createBLUCPUMCInstPrinter);
   TargetRegistry::RegisterMCRegInfo(getTheBLUCPUTarget(), createBLUCPUMCRegisterInfo);
 }

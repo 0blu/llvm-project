@@ -9,6 +9,11 @@ class BLUCPUInst<string asmstr, dag outs, dag ins>
   let InOperandList  = ins;
 }
 
+// MOV reg, imm32
+def MOVri : BLUCPUInst<"mov $dst, $imm",
+                       (outs GP_REGS:$dst),
+                       (ins i32imm:$imm)>;
+
 // ADD reg, reg
 def ADDrr : BLUCPUInst<"add $dst, $src",
                        (outs GP_REGS:$dst),

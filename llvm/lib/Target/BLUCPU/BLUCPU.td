@@ -18,8 +18,6 @@ def BLUCPU : Target {
 }
 
 // == We need at least one subtarget ==
-// Empty feature set
-def FeatureNone : SubtargetFeature<"", "", "", "No features supported">;
-// Define a single processor called "all"
-def : ProcessorModel<"all", NoSchedModel, [FeatureNone]>;
+// Define a single processor called "generic"
+def : ProcessorModel<"generic", NoSchedModel, []>;
 
