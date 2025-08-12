@@ -65,7 +65,7 @@ public:
   bool GETTER() const { return ATTRIBUTE; }
 #include "BLUCPUGenSubtargetInfo.inc"
 
-  uint8_t getIORegisterOffset() const { return hasMemMappedGPR() ? 0x20 : 0x0; }
+  uint8_t getIORegisterOffset() const { return 0x0; }
 
   bool enableSubRegLiveness() const override { return true; }
 
@@ -78,21 +78,21 @@ public:
   }
 
   /// Get I/O register addresses.
-  int getIORegRAMPZ() const { return hasELPM() ? 0x3b : -1; }
-  int getIORegEIND() const { return hasEIJMPCALL() ? 0x3c : -1; }
+  int getIORegRAMPZ() const { return -1; }
+  int getIORegEIND() const { return -1; }
   int getIORegSPL() const { return 0x3d; }
-  int getIORegSPH() const { return hasSmallStack() ? -1 : 0x3e; }
+  int getIORegSPH() const { return 0x3e; }
   int getIORegSREG() const { return 0x3f; }
 
   /// Get GPR aliases.
-  int getRegTmpIndex() const { return hasTinyEncoding() ? 16 : 0; }
-  int getRegZeroIndex() const { return hasTinyEncoding() ? 17 : 1; }
+  int getRegTmpIndex() const { return 0; }
+  int getRegZeroIndex() const { return 1; }
 
   Register getTmpRegister() const {
-    return hasTinyEncoding() ? BLUCPU::R16 : BLUCPU::R0;
+    return BLUCPU::R0;
   }
   Register getZeroRegister() const {
-    return hasTinyEncoding() ? BLUCPU::R17 : BLUCPU::R1;
+    return BLUCPU::R1;
   }
 
 private:

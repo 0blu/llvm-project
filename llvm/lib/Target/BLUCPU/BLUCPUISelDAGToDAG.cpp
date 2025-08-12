@@ -194,14 +194,15 @@ unsigned BLUCPUDAGToDAGISel::selectIndexedProgMemLoad(const LoadSDNode *LD, MVT 
     return 0;
 
   // Feature ELPM is needed for loading from extended program memory.
-  assert((Bank == 0 || Subtarget->hasELPM()) &&
+  assert((Bank == 0) &&
          "cannot load from extended program memory on this mcu");
 
   unsigned Opcode = 0;
   int Offs = cast<ConstantSDNode>(LD->getOffset())->getSExtValue();
 
-  if (VT.SimpleTy == MVT::i8 && Offs == 1 && Bank == 0)
-    Opcode = BLUCPU::LPMRdZPi;
+  if (VT.SimpleTy == MVT::i8 && Offs == 1 && Bank == 0) {
+    llvm_unreachable("There is no LPMRdZPi");
+  }
 
   // TODO: Implements the expansion of the following pseudo instructions.
   // LPMWRdZPi:  type == MVT::i16, offset == 2, Bank == 0.
@@ -372,84 +373,8 @@ template <> bool BLUCPUDAGToDAGISel::select<ISD::LOAD>(SDNode *N) {
     return selectIndexedLoad(N);
   }
 
-  if (!Subtarget->hasLPM())
-    report_fatal_error("cannot load from program memory on this mcu");
-
-  int ProgMemBank = BLUCPU::getProgramMemoryBank(LD);
-  if (ProgMemBank < 0 || ProgMemBank > 5)
-    report_fatal_error("unexpected program memory bank");
-  if (ProgMemBank > 0 && !Subtarget->hasELPM())
-    report_fatal_error("unexpected program memory bank");
-
-  // This is a flash memory load, move the pointer into R31R30 and emit
-  // the lpm instruction.
-  MVT VT = LD->getMemoryVT().getSimpleVT();
-  SDValue Chain = LD->getChain();
-  SDValue Ptr = LD->getBasePtr();
-  SDNode *ResNode;
-  SDLoc DL(N);
-
-  Chain = CurDAG->getCopyToReg(Chain, DL, BLUCPU::R31R30, Ptr, SDValue());
-  Ptr = CurDAG->getCopyFromReg(Chain, DL, BLUCPU::R31R30, MVT::i16,
-                               Chain.getValue(1));
-
-  // Check if the opcode can be converted into an indexed load.
-  if (unsigned LPMOpc = selectIndexedProgMemLoad(LD, VT, ProgMemBank)) {
-    // It is legal to fold the load into an indexed load.
-    if (ProgMemBank == 0) {
-      ResNode =
-          CurDAG->getMachineNode(LPMOpc, DL, VT, MVT::i16, MVT::Other, Ptr);
-    } else {
-      // Do not combine the LDI instruction into the ELPM pseudo instruction,
-      // since it may be reused by other ELPM pseudo instructions.
-      SDValue NC = CurDAG->getTargetConstant(ProgMemBank, DL, MVT::i8);
-      auto *NP = CurDAG->getMachineNode(BLUCPU::LDIRdK, DL, MVT::i8, NC);
-      ResNode = CurDAG->getMachineNode(LPMOpc, DL, VT, MVT::i16, MVT::Other,
-                                       Ptr, SDValue(NP, 0));
-    }
-  } else {
-    // Selecting an indexed load is not legal, fallback to a normal load.
-    switch (VT.SimpleTy) {
-    case MVT::i8:
-      if (ProgMemBank == 0) {
-        unsigned Opc = Subtarget->hasLPMX() ? BLUCPU::LPMRdZ : BLUCPU::LPMBRdZ;
-        ResNode =
-            CurDAG->getMachineNode(Opc, DL, MVT::i8, MVT::Other, Ptr);
-      } else {
-        // Do not combine the LDI instruction into the ELPM pseudo instruction,
-        // since it may be reused by other ELPM pseudo instructions.
-        SDValue NC = CurDAG->getTargetConstant(ProgMemBank, DL, MVT::i8);
-        auto *NP = CurDAG->getMachineNode(BLUCPU::LDIRdK, DL, MVT::i8, NC);
-        ResNode = CurDAG->getMachineNode(BLUCPU::ELPMBRdZ, DL, MVT::i8, MVT::Other,
-                                         Ptr, SDValue(NP, 0));
-      }
-      break;
-    case MVT::i16:
-      if (ProgMemBank == 0) {
-        ResNode =
-            CurDAG->getMachineNode(BLUCPU::LPMWRdZ, DL, MVT::i16, MVT::Other, Ptr);
-      } else {
-        // Do not combine the LDI instruction into the ELPM pseudo instruction,
-        // since LDI requires the destination register in range R16~R31.
-        SDValue NC = CurDAG->getTargetConstant(ProgMemBank, DL, MVT::i8);
-        auto *NP = CurDAG->getMachineNode(BLUCPU::LDIRdK, DL, MVT::i8, NC);
-        ResNode = CurDAG->getMachineNode(BLUCPU::ELPMWRdZ, DL, MVT::i16,
-                                         MVT::Other, Ptr, SDValue(NP, 0));
-      }
-      break;
-    default:
-      llvm_unreachable("Unsupported VT!");
-    }
-  }
-
-  // Transfer memory operands.
-  CurDAG->setNodeMemRefs(cast<MachineSDNode>(ResNode), {LD->getMemOperand()});
-
-  ReplaceUses(SDValue(N, 0), SDValue(ResNode, 0));
-  ReplaceUses(SDValue(N, 1), SDValue(ResNode, 1));
-  CurDAG->RemoveDeadNode(N);
-
-  return true;
+  report_fatal_error("cannot load from program memory on this mcu");
+  return false;
 }
 
 template <> bool BLUCPUDAGToDAGISel::select<BLUCPUISD::CALL>(SDNode *N) {
@@ -463,49 +388,53 @@ template <> bool BLUCPUDAGToDAGISel::select<BLUCPUISD::CALL>(SDNode *N) {
   if (Op == ISD::TargetGlobalAddress || Op == ISD::TargetExternalSymbol) {
     return false;
   }
-
-  // Skip the incoming flag if present
-  if (N->getOperand(LastOpNum).getValueType() == MVT::Glue) {
-    --LastOpNum;
-  }
-
-  SDLoc DL(N);
-  Chain = CurDAG->getCopyToReg(Chain, DL, BLUCPU::R31R30, Callee, InGlue);
-  SmallVector<SDValue, 8> Ops;
-  Ops.push_back(CurDAG->getRegister(BLUCPU::R31R30, MVT::i16));
-
-  // Map all operands into the new node.
-  for (unsigned i = 2, e = LastOpNum + 1; i != e; ++i) {
-    Ops.push_back(N->getOperand(i));
-  }
-
-  Ops.push_back(Chain);
-  Ops.push_back(Chain.getValue(1));
-
-  SDNode *ResNode = CurDAG->getMachineNode(
-      Subtarget->hasEIJMPCALL() ? BLUCPU::EICALL : BLUCPU::ICALL, DL, MVT::Other,
-      MVT::Glue, Ops);
-
-  ReplaceUses(SDValue(N, 0), SDValue(ResNode, 0));
-  ReplaceUses(SDValue(N, 1), SDValue(ResNode, 1));
-  CurDAG->RemoveDeadNode(N);
-
-  return true;
+  llvm_unreachable("UMM hasEIJMPCALL");
+  return false;
+  //
+  // // Skip the incoming flag if present
+  // if (N->getOperand(LastOpNum).getValueType() == MVT::Glue) {
+  //   --LastOpNum;
+  // }
+  //
+  // SDLoc DL(N);
+  // Chain = CurDAG->getCopyToReg(Chain, DL, BLUCPU::R31R30, Callee, InGlue);
+  // SmallVector<SDValue, 8> Ops;
+  // Ops.push_back(CurDAG->getRegister(BLUCPU::R31R30, MVT::i16));
+  //
+  // // Map all operands into the new node.
+  // for (unsigned i = 2, e = LastOpNum + 1; i != e; ++i) {
+  //   Ops.push_back(N->getOperand(i));
+  // }
+  //
+  // Ops.push_back(Chain);
+  // Ops.push_back(Chain.getValue(1));
+  //
+  // SDNode *ResNode = CurDAG->getMachineNode(
+  //     Subtarget->hasEIJMPCALL() ? BLUCPU::EICALL : BLUCPU::ICALL, DL, MVT::Other,
+  //     MVT::Glue, Ops);
+  //
+  // ReplaceUses(SDValue(N, 0), SDValue(ResNode, 0));
+  // ReplaceUses(SDValue(N, 1), SDValue(ResNode, 1));
+  // CurDAG->RemoveDeadNode(N);
+  //
+  // return true;
 }
 
 template <> bool BLUCPUDAGToDAGISel::select<ISD::BRIND>(SDNode *N) {
-  SDValue Chain = N->getOperand(0);
-  SDValue JmpAddr = N->getOperand(1);
-
-  SDLoc DL(N);
-  // Move the destination address of the indirect branch into R31R30.
-  Chain = CurDAG->getCopyToReg(Chain, DL, BLUCPU::R31R30, JmpAddr);
-  SDNode *ResNode = CurDAG->getMachineNode(BLUCPU::IJMP, DL, MVT::Other, Chain);
-
-  ReplaceUses(SDValue(N, 0), SDValue(ResNode, 0));
-  CurDAG->RemoveDeadNode(N);
-
-  return true;
+  llvm_unreachable("UMM IJMP");
+  return false;
+  // SDValue Chain = N->getOperand(0);
+  // SDValue JmpAddr = N->getOperand(1);
+  //
+  // SDLoc DL(N);
+  // // Move the destination address of the indirect branch into R31R30.
+  // Chain = CurDAG->getCopyToReg(Chain, DL, BLUCPU::R31R30, JmpAddr);
+  // SDNode *ResNode = CurDAG->getMachineNode(BLUCPU::IJMP, DL, MVT::Other, Chain);
+  //
+  // ReplaceUses(SDValue(N, 0), SDValue(ResNode, 0));
+  // CurDAG->RemoveDeadNode(N);
+  //
+  // return true;
 }
 
 bool BLUCPUDAGToDAGISel::selectMultiplication(llvm::SDNode *N) {

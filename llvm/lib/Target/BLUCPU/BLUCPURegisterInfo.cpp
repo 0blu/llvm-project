@@ -36,20 +36,14 @@ BLUCPURegisterInfo::BLUCPURegisterInfo() : BLUCPUGenRegisterInfo(0) {}
 const uint16_t *
 BLUCPURegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   const BLUCPUMachineFunctionInfo *AFI = MF->getInfo<BLUCPUMachineFunctionInfo>();
-  const BLUCPUSubtarget &STI = MF->getSubtarget<BLUCPUSubtarget>();
-  if (STI.hasTinyEncoding())
-    return AFI->isInterruptOrSignalHandler() ? CSR_InterruptsTiny_SaveList
-                                             : CSR_NormalTiny_SaveList;
-  else
-    return AFI->isInterruptOrSignalHandler() ? CSR_Interrupts_SaveList
-                                             : CSR_Normal_SaveList;
+
+  return AFI->isInterruptOrSignalHandler() ? CSR_Interrupts_SaveList
+                                           : CSR_Normal_SaveList;
 }
 
 const uint32_t *
-BLUCPURegisterInfo::getCallPreservedMask(const MachineFunction &MF,
-                                      CallingConv::ID CC) const {
-  const BLUCPUSubtarget &STI = MF.getSubtarget<BLUCPUSubtarget>();
-  return STI.hasTinyEncoding() ? CSR_NormalTiny_RegMask : CSR_Normal_RegMask;
+BLUCPURegisterInfo::getCallPreservedMask(const MachineFunction &MF, CallingConv::ID CC) const {
+  return CSR_Normal_RegMask;
 }
 
 BitVector BLUCPURegisterInfo::getReservedRegs(const MachineFunction &MF) const {
@@ -66,16 +60,6 @@ BitVector BLUCPURegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(BLUCPU::SPL);
   Reserved.set(BLUCPU::SPH);
   Reserved.set(BLUCPU::SP);
-
-  // Reserve R2~R17 only on blucputiny.
-  if (MF.getSubtarget<BLUCPUSubtarget>().hasTinyEncoding()) {
-    // Reserve 8-bit registers R2~R15, Rtmp(R16) and Zero(R17).
-    for (unsigned Reg = BLUCPU::R2; Reg <= BLUCPU::R17; Reg++)
-      Reserved.set(Reg);
-    // Reserve 16-bit registers R3R2~R18R17.
-    for (unsigned Reg = BLUCPU::R3R2; Reg <= BLUCPU::R18R17; Reg++)
-      Reserved.set(Reg);
-  }
 
   // We tenatively reserve the frame pointer register r29:r28 because the
   // function may require one, but we cannot tell until register allocation
@@ -115,7 +99,7 @@ static void foldFrameOffset(MachineBasicBlock::iterator &II, int &Offset,
   int Opcode = MI.getOpcode();
 
   // Don't bother trying if the next instruction is not an add or a sub.
-  if ((Opcode != BLUCPU::SUBIWRdK) && (Opcode != BLUCPU::ADIWRdK)) {
+  if (Opcode != BLUCPU::SUBIWRdK) {
     return;
   }
 
@@ -129,9 +113,6 @@ static void foldFrameOffset(MachineBasicBlock::iterator &II, int &Offset,
   switch (Opcode) {
   case BLUCPU::SUBIWRdK:
     Offset += -MI.getOperand(2).getImm();
-    break;
-  case BLUCPU::ADIWRdK:
-    Offset += MI.getOperand(2).getImm();
     break;
   }
 
@@ -170,17 +151,12 @@ bool BLUCPURegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     assert(DstReg != BLUCPU::R29R28 && "Dest reg cannot be the frame pointer");
 
     // Copy the frame pointer.
-    if (STI.hasMOVW()) {
-      BuildMI(MBB, MI, dl, TII.get(BLUCPU::MOVWRdRr), DstReg)
-          .addReg(BLUCPU::R29R28);
-    } else {
-      Register DstLoReg, DstHiReg;
-      splitReg(DstReg, DstLoReg, DstHiReg);
-      BuildMI(MBB, MI, dl, TII.get(BLUCPU::MOVRdRr), DstLoReg)
-          .addReg(BLUCPU::R28);
-      BuildMI(MBB, MI, dl, TII.get(BLUCPU::MOVRdRr), DstHiReg)
-          .addReg(BLUCPU::R29);
-    }
+    Register DstLoReg, DstHiReg;
+    splitReg(DstReg, DstLoReg, DstHiReg);
+    BuildMI(MBB, MI, dl, TII.get(BLUCPU::MOVRdRr), DstLoReg)
+        .addReg(BLUCPU::R28);
+    BuildMI(MBB, MI, dl, TII.get(BLUCPU::MOVRdRr), DstHiReg)
+        .addReg(BLUCPU::R29);
 
     assert(Offset > 0 && "Invalid offset");
 
@@ -205,10 +181,6 @@ bool BLUCPURegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     case BLUCPU::R25R24:
     case BLUCPU::R27R26:
     case BLUCPU::R31R30: {
-      if (isUInt<6>(Offset) && STI.hasADDSUBIW()) {
-        Opcode = BLUCPU::ADIWRdK;
-        break;
-      }
       [[fallthrough]];
     }
     default: {
@@ -234,22 +206,19 @@ bool BLUCPURegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   // "reduced tiny" cores don't support load/store with displacement. So for
   // them, we force an offset of 0 meaning that any positive offset will require
   // adjusting the frame pointer.
-  int MaxOffset = STI.hasTinyEncoding() ? 0 : 62;
+  int MaxOffset = 62;
 
   // If the offset is too big we have to adjust and restore the frame pointer
   // to materialize a valid load/store with displacement.
   //: TODO: consider using only one adiw/sbiw chain for more than one frame
   //: index
   if (Offset > MaxOffset) {
-    unsigned AddOpc = BLUCPU::ADIWRdK, SubOpc = BLUCPU::SBIWRdK;
     int AddOffset = Offset - MaxOffset;
 
     // For huge offsets where adiw/sbiw cannot be used use a pair of subi/sbci.
-    if ((Offset - MaxOffset) > 63 || !STI.hasADDSUBIW()) {
-      AddOpc = BLUCPU::SUBIWRdK;
-      SubOpc = BLUCPU::SUBIWRdK;
-      AddOffset = -AddOffset;
-    }
+    unsigned AddOpc = BLUCPU::SUBIWRdK;
+    unsigned SubOpc = BLUCPU::SUBIWRdK;
+    AddOffset = -AddOffset;
 
     // It is possible that the spiller places this frame instruction in between
     // a compare and branch, invalidating the contents of SREG set by the

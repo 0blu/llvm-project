@@ -42,19 +42,13 @@ BLUCPUMCInstLower::lowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym,
 
   if (TF & BLUCPUII::MO_LO) {
     if (IsFunction) {
-      Expr =
-          BLUCPUMCExpr::create(Subtarget.hasEIJMPCALL() ? BLUCPUMCExpr::VK_BLUCPU_LO8_GS
-                                                     : BLUCPUMCExpr::VK_BLUCPU_PM_LO8,
-                            Expr, IsNegated, Ctx);
+      Expr = BLUCPUMCExpr::create(BLUCPUMCExpr::VK_BLUCPU_PM_LO8, Expr, IsNegated, Ctx);
     } else {
       Expr = BLUCPUMCExpr::create(BLUCPUMCExpr::VK_BLUCPU_LO8, Expr, IsNegated, Ctx);
     }
   } else if (TF & BLUCPUII::MO_HI) {
     if (IsFunction) {
-      Expr =
-          BLUCPUMCExpr::create(Subtarget.hasEIJMPCALL() ? BLUCPUMCExpr::VK_BLUCPU_HI8_GS
-                                                     : BLUCPUMCExpr::VK_BLUCPU_PM_HI8,
-                            Expr, IsNegated, Ctx);
+      Expr = BLUCPUMCExpr::create(BLUCPUMCExpr::VK_BLUCPU_PM_HI8, Expr, IsNegated, Ctx);
     } else {
       Expr = BLUCPUMCExpr::create(BLUCPUMCExpr::VK_BLUCPU_HI8, Expr, IsNegated, Ctx);
     }

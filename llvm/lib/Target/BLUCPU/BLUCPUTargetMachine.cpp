@@ -33,7 +33,7 @@ static const char *BLUCPUDataLayout =
 /// Processes a CPU name.
 static StringRef getCPU(StringRef CPU) {
   if (CPU.empty() || CPU == "generic") {
-    return "blucpu2";
+    return "blucpu";
   }
 
   return CPU;

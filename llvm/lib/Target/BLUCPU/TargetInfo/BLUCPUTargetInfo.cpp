@@ -17,5 +17,5 @@ Target &getTheBLUCPUTarget() {
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeBLUCPUTargetInfo() {
   llvm::RegisterTarget<llvm::Triple::blucpu> X(llvm::getTheBLUCPUTarget(), "blucpu",
-                                            "Atmel BLUCPU Microcontroller", "BLUCPU");
+                                            "BLUCPU Target", "BLUCPU");
 }

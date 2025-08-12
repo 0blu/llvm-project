@@ -406,11 +406,6 @@ bool BLUCPUAsmParser::tryParseRegisterOperand(OperandVector &Operands) {
   if (RegNo == BLUCPU::NoRegister)
     return true;
 
-  // Reject R0~R15 on blucputiny.
-  if (BLUCPU::R0 <= RegNo && RegNo <= BLUCPU::R15 &&
-      STI.hasFeature(BLUCPU::FeatureTinyEncoding))
-    return Error(Parser.getTok().getLoc(), "invalid register on blucputiny");
-
   AsmToken const &T = Parser.getTok();
   Operands.push_back(BLUCPUOperand::CreateReg(RegNo, T.getLoc(), T.getEndLoc()));
   Parser.Lex(); // Eat register token.
@@ -753,11 +748,6 @@ unsigned BLUCPUAsmParser::validateTargetOperandClass(MCParsedAsmOperand &AsmOp,
   if (Op.isImm()) {
     if (MCConstantExpr const *Const = dyn_cast<MCConstantExpr>(Op.getImm())) {
       int64_t RegNum = Const->getValue();
-
-      // Reject R0~R15 on blucputiny.
-      if (0 <= RegNum && RegNum <= 15 &&
-          STI.hasFeature(BLUCPU::FeatureTinyEncoding))
-        return Match_InvalidRegisterOnTiny;
 
       std::ostringstream RegName;
       RegName << "r" << RegNum;

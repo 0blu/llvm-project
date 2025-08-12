@@ -236,7 +236,6 @@ void BLUCPUAsmPrinter::emitXXStructor(const DataLayout &DL, const Constant *CV) 
 bool BLUCPUAsmPrinter::doFinalization(Module &M) {
   const TargetLoweringObjectFile &TLOF = getObjFileLowering();
   const BLUCPUTargetMachine &TM = (const BLUCPUTargetMachine &)MMI->getTarget();
-  const BLUCPUSubtarget *SubTM = (const BLUCPUSubtarget *)TM.getSubtargetImpl();
 
   bool NeedsCopyData = false;
   bool NeedsClearBSS = false;
@@ -253,10 +252,6 @@ bool BLUCPUAsmPrinter::doFinalization(Module &M) {
 
     auto *Section = cast<MCSectionELF>(TLOF.SectionForGlobal(&GO, TM));
     if (Section->getName().starts_with(".data"))
-      NeedsCopyData = true;
-    else if (Section->getName().starts_with(".rodata") && SubTM->hasLPM())
-      // BLUCPUs that have a separate program memory (that's most BLUCPUs) store
-      // .rodata sections in RAM.
       NeedsCopyData = true;
     else if (Section->getName().starts_with(".bss"))
       NeedsClearBSS = true;
@@ -301,25 +296,10 @@ void BLUCPUAsmPrinter::emitStartOfAsmFile(Module &M) {
   OutStreamer->emitAssignment(
       MMI->getContext().getOrCreateSymbol(StringRef("__SREG__")),
       MCConstantExpr::create(SubTM->getIORegSREG(), MMI->getContext()));
-  // Emit __SP_H__ if available.
-  if (!SubTM->hasSmallStack())
-    OutStreamer->emitAssignment(
-        MMI->getContext().getOrCreateSymbol(StringRef("__SP_H__")),
-        MCConstantExpr::create(SubTM->getIORegSPH(), MMI->getContext()));
   // Emit __SP_L__.
   OutStreamer->emitAssignment(
       MMI->getContext().getOrCreateSymbol(StringRef("__SP_L__")),
       MCConstantExpr::create(SubTM->getIORegSPL(), MMI->getContext()));
-  // Emit __EIND__ if available.
-  if (SubTM->hasEIJMPCALL())
-    OutStreamer->emitAssignment(
-        MMI->getContext().getOrCreateSymbol(StringRef("__EIND__")),
-        MCConstantExpr::create(SubTM->getIORegEIND(), MMI->getContext()));
-  // Emit __RAMPZ__ if available.
-  if (SubTM->hasELPM())
-    OutStreamer->emitAssignment(
-        MMI->getContext().getOrCreateSymbol(StringRef("__RAMPZ__")),
-        MCConstantExpr::create(SubTM->getIORegRAMPZ(), MMI->getContext()));
 }
 
 } // end of namespace llvm

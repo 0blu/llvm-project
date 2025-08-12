@@ -97,10 +97,6 @@ private:
   bool expandASRW14Rd(Block &MBB, BlockIt MBBI);
   bool expandASRW15Rd(Block &MBB, BlockIt MBBI);
 
-  // Common implementation of LPMWRdZ and ELPMWRdZ.
-  bool expandLPMWELPMW(Block &MBB, BlockIt MBBI, bool IsELPM);
-  // Common implementation of LPMBRdZ and ELPMBRdZ.
-  bool expandLPMBELPMB(Block &MBB, BlockIt MBBI, bool IsELPM);
   // Common implementation of ROLBRdR1 and ROLBRdR17.
   bool expandROLBRd(Block &MBB, BlockIt MBBI);
 };
@@ -668,32 +664,21 @@ bool BLUCPUExpandPseudo::expand<BLUCPU::LDWRdPtr>(Block &MBB, BlockIt MBBI) {
   // separate registers.
   assert(DstReg != SrcReg && "Dst and Src registers are the same!");
 
-  if (STI.hasTinyEncoding()) {
-    // Handle this case in the expansion of LDDWRdPtrQ because it is very
-    // similar.
-    buildMI(MBB, MBBI, BLUCPU::LDDWRdPtrQ)
-        .addDef(DstReg, getKillRegState(DstIsKill))
-        .addReg(SrcReg, getKillRegState(SrcIsKill))
-        .addImm(0)
-        .setMemRefs(MI.memoperands());
+  Register DstLoReg, DstHiReg;
+  TRI->splitReg(DstReg, DstLoReg, DstHiReg);
 
-  } else {
-    Register DstLoReg, DstHiReg;
-    TRI->splitReg(DstReg, DstLoReg, DstHiReg);
+  // Load low byte.
+  buildMI(MBB, MBBI, BLUCPU::LDRdPtr)
+      .addReg(DstLoReg, RegState::Define)
+      .addReg(SrcReg)
+      .setMemRefs(MI.memoperands());
 
-    // Load low byte.
-    buildMI(MBB, MBBI, BLUCPU::LDRdPtr)
-        .addReg(DstLoReg, RegState::Define)
-        .addReg(SrcReg)
-        .setMemRefs(MI.memoperands());
-
-    // Load high byte.
-    buildMI(MBB, MBBI, BLUCPU::LDDRdPtrQ)
-        .addReg(DstHiReg, RegState::Define)
-        .addReg(SrcReg, getKillRegState(SrcIsKill))
-        .addImm(1)
-        .setMemRefs(MI.memoperands());
-  }
+  // Load high byte.
+  buildMI(MBB, MBBI, BLUCPU::LDDRdPtrQ)
+      .addReg(DstHiReg, RegState::Define)
+      .addReg(SrcReg, getKillRegState(SrcIsKill))
+      .addImm(1)
+      .setMemRefs(MI.memoperands());
 
   MI.eraseFromParent();
   return true;
@@ -783,228 +768,25 @@ bool BLUCPUExpandPseudo::expand<BLUCPU::LDDWRdPtrQ>(Block &MBB, BlockIt MBBI) {
   // separate registers.
   assert(DstReg != SrcReg && "Dst and Src registers are the same!");
 
-  if (STI.hasTinyEncoding()) {
-    // Reduced tiny cores don't support load/store with displacement. However,
-    // they do support postincrement. So we'll simply adjust the pointer before
-    // and after and use postincrement to load multiple registers.
-
-    // Add offset. The offset can be 0 when expanding this instruction from the
-    // more specific LDWRdPtr instruction.
-    if (Imm != 0) {
-      buildMI(MBB, MBBI, BLUCPU::SUBIWRdK, SrcReg)
-          .addReg(SrcReg)
-          .addImm(0x10000 - Imm);
-    }
-
-    // Do a word load with postincrement. This will be lowered to a two byte
-    // load.
-    buildMI(MBB, MBBI, BLUCPU::LDWRdPtrPi)
-        .addDef(DstReg, getKillRegState(DstIsKill))
-        .addReg(SrcReg, getKillRegState(SrcIsKill))
-        .addImm(0)
-        .setMemRefs(MI.memoperands());
-
-    // If the pointer is used after the store instruction, subtract the new
-    // offset (with 2 added after the postincrement instructions) so it is the
-    // same as before.
-    if (!SrcIsKill) {
-      buildMI(MBB, MBBI, BLUCPU::SUBIWRdK, SrcReg).addReg(SrcReg).addImm(Imm + 2);
-    }
-  } else {
-    Register DstLoReg, DstHiReg;
-    TRI->splitReg(DstReg, DstLoReg, DstHiReg);
-
-    // Load low byte.
-    buildMI(MBB, MBBI, BLUCPU::LDDRdPtrQ)
-        .addReg(DstLoReg, RegState::Define)
-        .addReg(SrcReg)
-        .addImm(Imm)
-        .setMemRefs(MI.memoperands());
-
-    // Load high byte.
-    buildMI(MBB, MBBI, BLUCPU::LDDRdPtrQ)
-        .addReg(DstHiReg, RegState::Define)
-        .addReg(SrcReg, getKillRegState(SrcIsKill))
-        .addImm(Imm + 1)
-        .setMemRefs(MI.memoperands());
-  }
-
-  MI.eraseFromParent();
-  return true;
-}
-
-bool BLUCPUExpandPseudo::expandLPMWELPMW(Block &MBB, BlockIt MBBI, bool IsELPM) {
-  MachineInstr &MI = *MBBI;
   Register DstLoReg, DstHiReg;
-  Register DstReg = MI.getOperand(0).getReg();
-  Register SrcReg = MI.getOperand(1).getReg();
-  Register SrcLoReg, SrcHiReg;
-  bool SrcIsKill = MI.getOperand(1).isKill();
-  const BLUCPUSubtarget &STI = MBB.getParent()->getSubtarget<BLUCPUSubtarget>();
-  bool IsLPMRn = IsELPM ? STI.hasELPMX() : STI.hasLPMX();
-
   TRI->splitReg(DstReg, DstLoReg, DstHiReg);
-  TRI->splitReg(SrcReg, SrcLoReg, SrcHiReg);
 
-  // Set the I/O register RAMPZ for ELPM.
-  if (IsELPM) {
-    Register Bank = MI.getOperand(2).getReg();
-    // out RAMPZ, rtmp
-    buildMI(MBB, MBBI, BLUCPU::OUTARr).addImm(STI.getIORegRAMPZ()).addReg(Bank);
-  }
+  // Load low byte.
+  buildMI(MBB, MBBI, BLUCPU::LDDRdPtrQ)
+      .addReg(DstLoReg, RegState::Define)
+      .addReg(SrcReg)
+      .addImm(Imm)
+      .setMemRefs(MI.memoperands());
 
-  // This is enforced by the @earlyclobber constraint.
-  assert(DstReg != SrcReg && "SrcReg and DstReg cannot be the same");
-
-  if (IsLPMRn) {
-    unsigned OpLo = IsELPM ? BLUCPU::ELPMRdZPi : BLUCPU::LPMRdZPi;
-    unsigned OpHi = IsELPM ? BLUCPU::ELPMRdZ : BLUCPU::LPMRdZ;
-    // Load low byte.
-    auto MIBLO = buildMI(MBB, MBBI, OpLo)
-                     .addReg(DstLoReg, RegState::Define)
-                     .addReg(SrcReg);
-    // Load high byte.
-    auto MIBHI = buildMI(MBB, MBBI, OpHi)
-                     .addReg(DstHiReg, RegState::Define)
-                     .addReg(SrcReg, getKillRegState(SrcIsKill));
-    MIBLO.setMemRefs(MI.memoperands());
-    MIBHI.setMemRefs(MI.memoperands());
-  } else {
-    unsigned Opc = IsELPM ? BLUCPU::ELPM : BLUCPU::LPM;
-    // Load low byte, and copy to the low destination register.
-    auto MIBLO = buildMI(MBB, MBBI, Opc);
-    buildMI(MBB, MBBI, BLUCPU::MOVRdRr)
-        .addReg(DstLoReg, RegState::Define)
-        .addReg(BLUCPU::R0, RegState::Kill);
-    MIBLO.setMemRefs(MI.memoperands());
-    // Increase the Z register by 1.
-    if (STI.hasADDSUBIW()) {
-      // adiw r31:r30, 1
-      auto MIINC = buildMI(MBB, MBBI, BLUCPU::ADIWRdK)
-                       .addReg(SrcReg, RegState::Define)
-                       .addReg(SrcReg, getKillRegState(SrcIsKill))
-                       .addImm(1);
-      MIINC->getOperand(3).setIsDead();
-    } else {
-      // subi r30, 255
-      // sbci r31, 255
-      buildMI(MBB, MBBI, BLUCPU::SUBIRdK)
-          .addReg(SrcLoReg, RegState::Define)
-          .addReg(SrcLoReg, getKillRegState(SrcIsKill))
-          .addImm(255);
-      auto MIZHI = buildMI(MBB, MBBI, BLUCPU::SBCIRdK)
-                       .addReg(SrcHiReg, RegState::Define)
-                       .addReg(SrcHiReg, getKillRegState(SrcIsKill))
-                       .addImm(255);
-      MIZHI->getOperand(3).setIsDead();
-      MIZHI->getOperand(4).setIsKill();
-    }
-    // Load high byte, and copy to the high destination register.
-    auto MIBHI = buildMI(MBB, MBBI, Opc);
-    buildMI(MBB, MBBI, BLUCPU::MOVRdRr)
-        .addReg(DstHiReg, RegState::Define)
-        .addReg(BLUCPU::R0, RegState::Kill);
-    MIBHI.setMemRefs(MI.memoperands());
-  }
-
-  // Restore the Z register if it is not killed.
-  if (!SrcIsKill) {
-    if (STI.hasADDSUBIW()) {
-      // sbiw r31:r30, 1
-      auto MIDEC = buildMI(MBB, MBBI, BLUCPU::SBIWRdK)
-                       .addReg(SrcReg, RegState::Define)
-                       .addReg(SrcReg, getKillRegState(SrcIsKill))
-                       .addImm(1);
-      MIDEC->getOperand(3).setIsDead();
-    } else {
-      // subi r30, 1
-      // sbci r31, 0
-      buildMI(MBB, MBBI, BLUCPU::SUBIRdK)
-          .addReg(SrcLoReg, RegState::Define)
-          .addReg(SrcLoReg, getKillRegState(SrcIsKill))
-          .addImm(1);
-      auto MIZHI = buildMI(MBB, MBBI, BLUCPU::SBCIRdK)
-                       .addReg(SrcHiReg, RegState::Define)
-                       .addReg(SrcHiReg, getKillRegState(SrcIsKill))
-                       .addImm(0);
-      MIZHI->getOperand(3).setIsDead();
-      MIZHI->getOperand(4).setIsKill();
-    }
-  }
+  // Load high byte.
+  buildMI(MBB, MBBI, BLUCPU::LDDRdPtrQ)
+      .addReg(DstHiReg, RegState::Define)
+      .addReg(SrcReg, getKillRegState(SrcIsKill))
+      .addImm(Imm + 1)
+      .setMemRefs(MI.memoperands());
 
   MI.eraseFromParent();
   return true;
-}
-
-template <>
-bool BLUCPUExpandPseudo::expand<BLUCPU::LPMWRdZ>(Block &MBB, BlockIt MBBI) {
-  return expandLPMWELPMW(MBB, MBBI, false);
-}
-
-template <>
-bool BLUCPUExpandPseudo::expand<BLUCPU::ELPMWRdZ>(Block &MBB, BlockIt MBBI) {
-  return expandLPMWELPMW(MBB, MBBI, true);
-}
-
-bool BLUCPUExpandPseudo::expandLPMBELPMB(Block &MBB, BlockIt MBBI, bool IsELPM) {
-  MachineInstr &MI = *MBBI;
-  Register DstReg = MI.getOperand(0).getReg();
-  Register SrcReg = MI.getOperand(1).getReg();
-  bool SrcIsKill = MI.getOperand(1).isKill();
-  const BLUCPUSubtarget &STI = MBB.getParent()->getSubtarget<BLUCPUSubtarget>();
-  bool IsLPMRn = IsELPM ? STI.hasELPMX() : STI.hasLPMX();
-
-  // Set the I/O register RAMPZ for ELPM (out RAMPZ, rtmp).
-  if (IsELPM) {
-    Register BankReg = MI.getOperand(2).getReg();
-    buildMI(MBB, MBBI, BLUCPU::OUTARr).addImm(STI.getIORegRAMPZ()).addReg(BankReg);
-  }
-
-  // Load byte.
-  if (IsLPMRn) {
-    unsigned Opc = IsELPM ? BLUCPU::ELPMRdZ : BLUCPU::LPMRdZ;
-    auto MILB = buildMI(MBB, MBBI, Opc)
-                    .addReg(DstReg, RegState::Define)
-                    .addReg(SrcReg, getKillRegState(SrcIsKill));
-    MILB.setMemRefs(MI.memoperands());
-  } else {
-    // For the basic ELPM/LPM instruction, its operand[0] is the implicit
-    // 'Z' register, and its operand[1] is the implicit 'R0' register.
-    unsigned Opc = IsELPM ? BLUCPU::ELPM : BLUCPU::LPM;
-    auto MILB = buildMI(MBB, MBBI, Opc);
-    buildMI(MBB, MBBI, BLUCPU::MOVRdRr)
-        .addReg(DstReg, RegState::Define)
-        .addReg(BLUCPU::R0, RegState::Kill);
-    MILB.setMemRefs(MI.memoperands());
-  }
-
-  MI.eraseFromParent();
-  return true;
-}
-
-template <>
-bool BLUCPUExpandPseudo::expand<BLUCPU::ELPMBRdZ>(Block &MBB, BlockIt MBBI) {
-  return expandLPMBELPMB(MBB, MBBI, true);
-}
-
-template <>
-bool BLUCPUExpandPseudo::expand<BLUCPU::LPMBRdZ>(Block &MBB, BlockIt MBBI) {
-  return expandLPMBELPMB(MBB, MBBI, false);
-}
-
-template <>
-bool BLUCPUExpandPseudo::expand<BLUCPU::LPMWRdZPi>(Block &MBB, BlockIt MBBI) {
-  llvm_unreachable("16-bit LPMPi is unimplemented");
-}
-
-template <>
-bool BLUCPUExpandPseudo::expand<BLUCPU::ELPMBRdZPi>(Block &MBB, BlockIt MBBI) {
-  llvm_unreachable("8-bit ELPMPi is unimplemented");
-}
-
-template <>
-bool BLUCPUExpandPseudo::expand<BLUCPU::ELPMWRdZPi>(Block &MBB, BlockIt MBBI) {
-  llvm_unreachable("16-bit ELPMPi is unimplemented");
 }
 
 template <typename Func>
@@ -1094,30 +876,18 @@ bool BLUCPUExpandPseudo::expand<BLUCPU::STSWKRr>(Block &MBB, BlockIt MBBI) {
     int64_t Offs = MI.getOperand(0).getOffset();
     unsigned TF = MI.getOperand(0).getTargetFlags();
 
-    if (STI.hasLowByteFirst()) {
-      // Write the low byte first for XMEGA devices.
-      MIB0.addGlobalAddress(GV, Offs, TF);
-      MIB1.addGlobalAddress(GV, Offs + 1, TF);
-    } else {
-      // Write the high byte first for traditional devices.
-      MIB0.addGlobalAddress(GV, Offs + 1, TF);
-      MIB1.addGlobalAddress(GV, Offs, TF);
-    }
+    // Write the high byte first for traditional devices.
+    MIB0.addGlobalAddress(GV, Offs + 1, TF);
+    MIB1.addGlobalAddress(GV, Offs, TF);
 
     break;
   }
   case MachineOperand::MO_Immediate: {
     unsigned Imm = MI.getOperand(0).getImm();
 
-    if (STI.hasLowByteFirst()) {
-      // Write the low byte first for XMEGA devices.
-      MIB0.addImm(Imm);
-      MIB1.addImm(Imm + 1);
-    } else {
-      // Write the high byte first for traditional devices.
-      MIB0.addImm(Imm + 1);
-      MIB1.addImm(Imm);
-    }
+    // Write the high byte first for traditional devices.
+    MIB0.addImm(Imm + 1);
+    MIB1.addImm(Imm);
 
     break;
   }
@@ -1125,19 +895,11 @@ bool BLUCPUExpandPseudo::expand<BLUCPU::STSWKRr>(Block &MBB, BlockIt MBBI) {
     llvm_unreachable("Unknown operand type!");
   }
 
-  if (STI.hasLowByteFirst()) {
-    // Write the low byte first for XMEGA devices.
-    MIB0.addReg(SrcLoReg, getKillRegState(SrcIsKill))
-        .setMemRefs(MI.memoperands());
-    MIB1.addReg(SrcHiReg, getKillRegState(SrcIsKill))
-        .setMemRefs(MI.memoperands());
-  } else {
-    // Write the high byte first for traditional devices.
-    MIB0.addReg(SrcHiReg, getKillRegState(SrcIsKill))
-        .setMemRefs(MI.memoperands());
-    MIB1.addReg(SrcLoReg, getKillRegState(SrcIsKill))
-        .setMemRefs(MI.memoperands());
-  }
+  // Write the high byte first for traditional devices.
+  MIB0.addReg(SrcHiReg, getKillRegState(SrcIsKill))
+      .setMemRefs(MI.memoperands());
+  MIB1.addReg(SrcLoReg, getKillRegState(SrcIsKill))
+      .setMemRefs(MI.memoperands());
 
   MI.eraseFromParent();
   return true;
@@ -1155,41 +917,18 @@ bool BLUCPUExpandPseudo::expand<BLUCPU::STWPtrRr>(Block &MBB, BlockIt MBBI) {
 
   //: TODO: need to reverse this order like inw and stsw?
 
-  if (STI.hasTinyEncoding()) {
-    // Handle this case in the expansion of STDWPtrQRr because it is very
-    // similar.
-    buildMI(MBB, MBBI, BLUCPU::STDWPtrQRr)
-        .addReg(DstReg,
-                getKillRegState(DstIsKill) | getUndefRegState(DstIsUndef))
-        .addImm(0)
-        .addReg(SrcReg, getKillRegState(SrcIsKill))
-        .setMemRefs(MI.memoperands());
+  Register SrcLoReg, SrcHiReg;
+  TRI->splitReg(SrcReg, SrcLoReg, SrcHiReg);
 
-  } else {
-    Register SrcLoReg, SrcHiReg;
-    TRI->splitReg(SrcReg, SrcLoReg, SrcHiReg);
-    if (STI.hasLowByteFirst()) {
-      buildMI(MBB, MBBI, BLUCPU::STPtrRr)
-          .addReg(DstReg, getUndefRegState(DstIsUndef))
-          .addReg(SrcLoReg, getKillRegState(SrcIsKill))
-          .setMemRefs(MI.memoperands());
-      buildMI(MBB, MBBI, BLUCPU::STDPtrQRr)
-          .addReg(DstReg, getUndefRegState(DstIsUndef))
-          .addImm(1)
-          .addReg(SrcHiReg, getKillRegState(SrcIsKill))
-          .setMemRefs(MI.memoperands());
-    } else {
-      buildMI(MBB, MBBI, BLUCPU::STDPtrQRr)
-          .addReg(DstReg, getUndefRegState(DstIsUndef))
-          .addImm(1)
-          .addReg(SrcHiReg, getKillRegState(SrcIsKill))
-          .setMemRefs(MI.memoperands());
-      buildMI(MBB, MBBI, BLUCPU::STPtrRr)
-          .addReg(DstReg, getUndefRegState(DstIsUndef))
-          .addReg(SrcLoReg, getKillRegState(SrcIsKill))
-          .setMemRefs(MI.memoperands());
-    }
-  }
+  buildMI(MBB, MBBI, BLUCPU::STDPtrQRr)
+      .addReg(DstReg, getUndefRegState(DstIsUndef))
+      .addImm(1)
+      .addReg(SrcHiReg, getKillRegState(SrcIsKill))
+      .setMemRefs(MI.memoperands());
+  buildMI(MBB, MBBI, BLUCPU::STPtrRr)
+      .addReg(DstReg, getUndefRegState(DstIsUndef))
+      .addReg(SrcLoReg, getKillRegState(SrcIsKill))
+      .setMemRefs(MI.memoperands());
 
   MI.eraseFromParent();
   return true;
@@ -1280,7 +1019,7 @@ bool BLUCPUExpandPseudo::expand<BLUCPU::STDWPtrQRr>(Block &MBB, BlockIt MBBI) {
   // set of operations.
   // For blucputiny chips, STD is not available at all so we always have to fall
   // back to manual pointer adjustments.
-  if (Imm >= 63 || STI.hasTinyEncoding()) {
+  if (Imm >= 63) {
     // Add offset. The offset can be 0 when expanding this instruction from the
     // more specific STWPtrRr instruction.
     if (Imm != 0) {
@@ -1308,29 +1047,16 @@ bool BLUCPUExpandPseudo::expand<BLUCPU::STDWPtrQRr>(Block &MBB, BlockIt MBBI) {
     Register SrcLoReg, SrcHiReg;
     TRI->splitReg(SrcReg, SrcLoReg, SrcHiReg);
 
-    if (STI.hasLowByteFirst()) {
-      buildMI(MBB, MBBI, BLUCPU::STDPtrQRr)
-          .addReg(DstReg)
-          .addImm(Imm)
-          .addReg(SrcLoReg, getKillRegState(SrcIsKill))
-          .setMemRefs(MI.memoperands());
-      buildMI(MBB, MBBI, BLUCPU::STDPtrQRr)
-          .addReg(DstReg, getKillRegState(DstIsKill))
-          .addImm(Imm + 1)
-          .addReg(SrcHiReg, getKillRegState(SrcIsKill))
-          .setMemRefs(MI.memoperands());
-    } else {
-      buildMI(MBB, MBBI, BLUCPU::STDPtrQRr)
-          .addReg(DstReg)
-          .addImm(Imm + 1)
-          .addReg(SrcHiReg, getKillRegState(SrcIsKill))
-          .setMemRefs(MI.memoperands());
-      buildMI(MBB, MBBI, BLUCPU::STDPtrQRr)
-          .addReg(DstReg, getKillRegState(DstIsKill))
-          .addImm(Imm)
-          .addReg(SrcLoReg, getKillRegState(SrcIsKill))
-          .setMemRefs(MI.memoperands());
-    }
+    buildMI(MBB, MBBI, BLUCPU::STDPtrQRr)
+        .addReg(DstReg)
+        .addImm(Imm + 1)
+        .addReg(SrcHiReg, getKillRegState(SrcIsKill))
+        .setMemRefs(MI.memoperands());
+    buildMI(MBB, MBBI, BLUCPU::STDPtrQRr)
+        .addReg(DstReg, getKillRegState(DstIsKill))
+        .addImm(Imm)
+        .addReg(SrcLoReg, getKillRegState(SrcIsKill))
+        .setMemRefs(MI.memoperands());
   }
 
   MI.eraseFromParent();
@@ -1424,12 +1150,12 @@ bool BLUCPUExpandPseudo::expand<BLUCPU::OUTWARr>(Block &MBB, BlockIt MBBI) {
   // 16 bit I/O writes need the high byte first on normal BLUCPU devices,
   // and in reverse order for the XMEGA/XMEGA3/XMEGAU families.
   auto MIBHI = buildMI(MBB, MBBI, BLUCPU::OUTARr)
-                   .addImm(STI.hasLowByteFirst() ? Imm : Imm + 1)
-                   .addReg(STI.hasLowByteFirst() ? SrcLoReg : SrcHiReg,
+                   .addImm(Imm + 1)
+                   .addReg(SrcHiReg,
                            getKillRegState(SrcIsKill));
   auto MIBLO = buildMI(MBB, MBBI, BLUCPU::OUTARr)
-                   .addImm(STI.hasLowByteFirst() ? Imm + 1 : Imm)
-                   .addReg(STI.hasLowByteFirst() ? SrcHiReg : SrcLoReg,
+                   .addImm(Imm)
+                   .addReg(SrcLoReg,
                            getKillRegState(SrcIsKill));
 
   MIBLO.setMemRefs(MI.memoperands());
@@ -1521,11 +1247,6 @@ bool BLUCPUExpandPseudo::expandROLBRd(Block &MBB, BlockIt MBBI) {
 
 template <>
 bool BLUCPUExpandPseudo::expand<BLUCPU::ROLBRdR1>(Block &MBB, BlockIt MBBI) {
-  return expandROLBRd(MBB, MBBI);
-}
-
-template <>
-bool BLUCPUExpandPseudo::expand<BLUCPU::ROLBRdR17>(Block &MBB, BlockIt MBBI) {
   return expandROLBRd(MBB, MBBI);
 }
 
@@ -2590,13 +2311,6 @@ bool BLUCPUExpandPseudo::expandMI(Block &MBB, BlockIt MBBI) {
     EXPAND(BLUCPU::LDWRdPtrPd);
   case BLUCPU::LDDWRdYQ: //: FIXME: remove this once PR13375 gets fixed
     EXPAND(BLUCPU::LDDWRdPtrQ);
-    EXPAND(BLUCPU::LPMBRdZ);
-    EXPAND(BLUCPU::LPMWRdZ);
-    EXPAND(BLUCPU::LPMWRdZPi);
-    EXPAND(BLUCPU::ELPMBRdZ);
-    EXPAND(BLUCPU::ELPMWRdZ);
-    EXPAND(BLUCPU::ELPMBRdZPi);
-    EXPAND(BLUCPU::ELPMWRdZPi);
     EXPAND(BLUCPU::AtomicLoad8);
     EXPAND(BLUCPU::AtomicLoad16);
     EXPAND(BLUCPU::AtomicStore8);
@@ -2614,7 +2328,6 @@ bool BLUCPUExpandPseudo::expandMI(Block &MBB, BlockIt MBBI) {
     EXPAND(BLUCPU::PUSHWRr);
     EXPAND(BLUCPU::POPWRd);
     EXPAND(BLUCPU::ROLBRdR1);
-    EXPAND(BLUCPU::ROLBRdR17);
     EXPAND(BLUCPU::RORBRd);
     EXPAND(BLUCPU::LSLWRd);
     EXPAND(BLUCPU::LSRWRd);

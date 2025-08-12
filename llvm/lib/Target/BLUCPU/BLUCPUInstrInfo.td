@@ -263,62 +263,20 @@ def LDDSTDPtrReg : Operand<i16> {
 // BLUCPU predicates for subtarget features
 //===----------------------------------------------------------------------===//
 
-def HasSRAM : Predicate<"Subtarget->hasSRAM()">,
-              AssemblerPredicate<(all_of FeatureSRAM)>;
+def HasSRAM : Predicate<"true">,
+              AssemblerPredicate<(all_of FeatureDummyAlways)>;
 
-def HasJMPCALL : Predicate<"Subtarget->hasJMPCALL()">,
-                 AssemblerPredicate<(all_of FeatureJMPCALL)>;
+def HasJMPCALL : Predicate<"true">,
+                 AssemblerPredicate<(all_of FeatureDummyAlways)>;
 
-def HasIJMPCALL : Predicate<"Subtarget->hasIJMPCALL()">,
-                  AssemblerPredicate<(all_of FeatureIJMPCALL)>;
+def SupportsMultiplication : Predicate<"true">,
+                             AssemblerPredicate<(all_of FeatureDummyAlways)>;
 
-def HasEIJMPCALL : Predicate<"Subtarget->hasEIJMPCALL()">,
-                   AssemblerPredicate<(all_of FeatureEIJMPCALL)>;
+def HasBREAK : Predicate<"true">,
+               AssemblerPredicate<(all_of FeatureDummyAlways)>;
 
-def HasADDSUBIW : Predicate<"Subtarget->hasADDSUBIW()">,
-                  AssemblerPredicate<(all_of FeatureADDSUBIW)>;
-
-def HasSmallStack : Predicate<"Subtarget->HasSmallStack()">,
-                    AssemblerPredicate<(all_of FeatureSmallStack)>;
-
-def HasMOVW : Predicate<"Subtarget->hasMOVW()">,
-              AssemblerPredicate<(all_of FeatureMOVW)>;
-
-def HasLPM : Predicate<"Subtarget->hasLPM()">,
-             AssemblerPredicate<(all_of FeatureLPM)>;
-
-def HasLPMX : Predicate<"Subtarget->hasLPMX()">,
-              AssemblerPredicate<(all_of FeatureLPMX)>;
-
-def HasELPM : Predicate<"Subtarget->hasELPM()">,
-              AssemblerPredicate<(all_of FeatureELPM)>;
-
-def HasELPMX : Predicate<"Subtarget->hasELPMX()">,
-               AssemblerPredicate<(all_of FeatureELPMX)>;
-
-def HasSPM : Predicate<"Subtarget->hasSPM()">,
-             AssemblerPredicate<(all_of FeatureSPM)>;
-
-def HasSPMX : Predicate<"Subtarget->hasSPMX()">,
-              AssemblerPredicate<(all_of FeatureSPMX)>;
-
-def HasDES : Predicate<"Subtarget->hasDES()">,
-             AssemblerPredicate<(all_of FeatureDES)>;
-
-def SupportsRMW : Predicate<"Subtarget->supportsRMW()">,
-                  AssemblerPredicate<(all_of FeatureRMW)>;
-
-def SupportsMultiplication : Predicate<"Subtarget->supportsMultiplication()">,
-                             AssemblerPredicate<(all_of FeatureMultiplication)>;
-
-def HasBREAK : Predicate<"Subtarget->hasBREAK()">,
-               AssemblerPredicate<(all_of FeatureBREAK)>;
-
-def HasTinyEncoding : Predicate<"Subtarget->hasTinyEncoding()">,
-                      AssemblerPredicate<(all_of FeatureTinyEncoding)>;
-
-def HasNonTinyEncoding : Predicate<"!Subtarget->hasTinyEncoding()">,
-                         AssemblerPredicate<(any_of (not FeatureTinyEncoding))>;
+def HasNonTinyEncoding : Predicate<"true">,
+                         AssemblerPredicate<(all_of FeatureDummyAlways)>;
 
 // BLUCPU specific condition code. These correspond to BLUCPU_*_COND in
 // BLUCPUInstrInfo.td. They must be kept in synch.
@@ -397,14 +355,6 @@ let isCommutable = 1, Constraints = "$src = $rd", Defs = [SREG] in {
                         "adcw\t$rd, $rr",
                         [(set i16:$rd, (adde i16:$src, i16:$rr)),
                          (implicit SREG)]>;
-
-  // AIDW Rd, k
-  // Adds an immediate 6-bit value K to Rd, placing the result in Rd.
-  def ADIWRdK : FWRdK<0b0, (outs IWREGS:$rd), (ins IWREGS :$src, imm_arith6:$k),
-                      "adiw\t$rd, $k",
-                      [(set i16:$rd, (add i16:$src, uimm6:$k)),
-                       (implicit SREG)]>,
-                Requires<[HasADDSUBIW]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -441,12 +391,6 @@ let Constraints = "$rs = $rd", Defs = [SREG] in {
                         "subiw\t$rd, $rr",
                         [(set i16:$rd, (sub i16:$rs, imm:$rr)),
                          (implicit SREG)]>;
-
-  def SBIWRdK : FWRdK<0b1, (outs IWREGS:$rd), (ins IWREGS:$rs, imm_arith6:$k),
-                      "sbiw\t$rd, $k",
-                      [(set i16:$rd, (sub i16:$rs, uimm6:$k)),
-                       (implicit SREG)]>,
-                Requires<[HasADDSUBIW]>;
 
   // Subtract with carry operations which must read the carry flag in SREG.
   let Uses = [SREG] in {
@@ -524,10 +468,6 @@ let isCommutable = 1, Defs = [R1, R0, SREG] in {
                          "fmulsu\t$rd, $rr", []>,
                Requires<[SupportsMultiplication]>;
 }
-
-let Defs =
-    [R15, R14, R13, R12, R11, R10, R9, R8, R7, R6, R5, R4, R3, R2, R1, R0] in
-def DESK : FDES<(outs), (ins i8imm:$k), "des\t$k", []>, Requires<[HasDES]>;
 
 //===----------------------------------------------------------------------===//
 // Logic
@@ -655,14 +595,6 @@ def : InstAlias<"sbr\t$rd, $k", (ORIRdK LD8:$rd, imm_ldi8:$k),
 let isBarrier = 1, isBranch = 1, isTerminator = 1 in {
   def RJMPk : FBRk<0, (outs), (ins brtarget_13:$k), "rjmp\t$k", [(br bb:$k)]>;
 
-  let isIndirectBranch = 1, Uses = [R31R30] in
-  def IJMP : F16<0b1001010000001001, (outs), (ins), "ijmp", []>,
-             Requires<[HasIJMPCALL]>;
-
-  let isIndirectBranch = 1, Uses = [R31R30] in
-  def EIJMP : F16<0b1001010000011001, (outs), (ins), "eijmp", []>,
-              Requires<[HasEIJMPCALL]>;
-
   def JMPk : F32BRk<0b110, (outs), (ins call_target:$k), "jmp\t$k", []>,
              Requires<[HasJMPCALL]>;
 }
@@ -676,19 +608,6 @@ let isCall = 1 in {
   let Uses = [SP] in
   def RCALLk : FBRk<1, (outs), (ins rcalltarget_13:$k), "rcall\t$k",
                     [(BLUCPUcall imm:$k)]>;
-
-  // SP is marked as a use to prevent stack-pointer assignments that appear
-  // immediately before calls from potentially appearing dead.
-  let Uses = [SP, R31R30] in
-  def ICALL : F16<0b1001010100001001, (outs), (ins variable_ops), "icall", []>,
-              Requires<[HasIJMPCALL]>;
-
-  // SP is marked as a use to prevent stack-pointer assignments that appear
-  // immediately before calls from potentially appearing dead.
-  let Uses = [SP, R31R30] in
-  def EICALL : F16<0b1001010100011001, (outs), (ins variable_ops), "eicall",
-                   []>,
-      Requires<[HasEIJMPCALL]>;
 
   // SP is marked as a use to prevent stack-pointer assignments that appear
   // immediately before calls from potentially appearing dead.
@@ -866,10 +785,6 @@ let isBranch = 1, isTerminator = 1, Uses = [SREG] in {
 let hasSideEffects = 0 in {
   def MOVRdRr : FRdRr<0b0010, 0b11, (outs GPR8:$rd), (ins GPR8:$rr),
                       "mov\t$rd, $rr", []>;
-
-  def MOVWRdRr : FMOVWRdRr<(outs DREGS:$rd), (ins DREGS:$rr), "movw\t$rd, $rr",
-                           []>,
-                 Requires<[HasMOVW]>;
 }
 
 // Load immediate values into registers.
@@ -891,11 +806,6 @@ let canFoldAsLoad = 1, isReMaterializable = 1 in {
   def LDSRdK : F32DM<0b0, (outs GPR8:$rd), (ins imm16:$k), "lds\t$rd, $k",
                      [(set i8:$rd, (load imm:$k))]>,
                Requires<[HasSRAM, HasNonTinyEncoding]>;
-
-  // Load from data space into register, which is only available on BLUCPUTiny.
-  def LDSRdKTiny : FLDSSTSTINY<0b0, (outs LD8:$rd), (ins imm7tiny:$k),
-                               "lds\t$rd, $k", [(set i8:$rd, (load imm:$k))]>,
-                   Requires<[HasSRAM, HasTinyEncoding]>;
 
   // LDSW Rd+1:Rd, K+1:K
   //
@@ -1059,11 +969,6 @@ def STSKRr : F32DM<0b1, (outs), (ins imm16:$k, GPR8:$rd), "sts\t$k, $rd",
                    [(store i8:$rd, imm:$k)]>,
              Requires<[HasSRAM, HasNonTinyEncoding]>;
 
-// Store from register to data space, which is only available on BLUCPUTiny.
-def STSKRrTiny : FLDSSTSTINY<0b1, (outs), (ins imm7tiny:$k, LD8:$rd),
-                             "sts\t$k, $rd", [(store i8:$rd, imm:$k)]>,
-                 Requires<[HasSRAM, HasTinyEncoding]>;
-
 // STSW K+1:K, Rr+1:Rr
 //
 // Expands to:
@@ -1171,105 +1076,6 @@ def STDWPtrQRr : Pseudo<(outs), (ins memri:$memri, DREGS:$src),
                         "stdw\t$memri, $src", [(store i16:$src, addr:$memri)]>,
                  Requires<[HasSRAM]>;
 
-// Load program memory operations.
-let canFoldAsLoad = 1, isReMaterializable = 1, mayLoad = 1,
-    hasSideEffects = 0 in {
-  let Defs = [R0],
-      Uses = [R31R30] in def LPM
-      : F16<0b1001010111001000, (outs), (ins), "lpm", []>,
-      Requires<[HasLPM]>;
-
-  // These pseudo instructions are combination of the OUT and LPM instructions.
-  let Defs = [R0] in {
-    def LPMBRdZ : Pseudo<(outs GPR8:$dst), (ins ZREG:$z), "lpmb\t$dst, $z", []>,
-                  Requires<[HasLPM]>;
-
-    let Constraints = "@earlyclobber $dst" in
-    def LPMWRdZ : Pseudo<(outs DREGS:$dst), (ins ZREG:$z), "lpmw\t$dst, $z", []>,
-                  Requires<[HasLPM]>;
-  }
-
-  def LPMRdZ : FLPMX<0, 0,
-                     (outs GPR8
-                      : $rd),
-                     (ins ZREG
-                      : $z),
-                     "lpm\t$rd, $z", []>,
-               Requires<[HasLPMX]>;
-
-  // Load program memory, while postincrementing the Z register.
-  let Defs = [R31R30] in {
-    def LPMRdZPi : FLPMX<0, 1,
-                         (outs GPR8
-                          : $rd),
-                         (ins ZREG
-                          : $z),
-                         "lpm\t$rd, $z+", []>,
-                   Requires<[HasLPMX]>;
-
-    def LPMWRdZPi : Pseudo<(outs DREGS
-                            : $dst),
-                           (ins ZREG
-                            : $z),
-                           "lpmw\t$dst, $z+", []>,
-                    Requires<[HasLPMX]>;
-  }
-}
-
-// Extended load program memory operations.
-let mayLoad = 1, hasSideEffects = 0 in {
-  let Defs = [R0],
-      Uses = [R31R30] in def ELPM
-      : F16<0b1001010111011000, (outs), (ins), "elpm", []>,
-      Requires<[HasELPM]>;
-
-  def ELPMRdZ : FLPMX<1, 0, (outs GPR8:$rd), (ins ZREG:$z),
-                      "elpm\t$rd, $z", []>,
-                Requires<[HasELPMX]>;
-
-  let Defs = [R31R30] in {
-    def ELPMRdZPi : FLPMX<1, 1, (outs GPR8:$rd), (ins ZREG:$z),
-                          "elpm\t$rd, $z+", []>,
-                    Requires<[HasELPMX]>;
-  }
-
-  // These pseudo instructions are combination of the OUT and ELPM instructions.
-  let Defs = [R0] in {
-    def ELPMBRdZ : Pseudo<(outs GPR8:$dst), (ins ZREG:$z, LD8:$p),
-                          "elpmb\t$dst, $z, $p", []>,
-                   Requires<[HasELPM]>;
-
-    let Constraints = "@earlyclobber $dst" in
-    def ELPMWRdZ : Pseudo<(outs DREGS:$dst), (ins ZREG:$z, LD8:$p),
-                          "elpmw\t$dst, $z, $p", []>,
-                   Requires<[HasELPM]>;
-  }
-
-  // These pseudos are combination of the OUT and ELPM instructions.
-  let Defs = [R31R30], hasSideEffects = 1 in {
-    def ELPMBRdZPi : Pseudo<(outs GPR8:$dst), (ins ZREG:$z, LD8:$p),
-                            "elpmb\t$dst, $z+, $p", []>,
-                     Requires<[HasELPMX]>;
-
-    def ELPMWRdZPi : Pseudo<(outs DREGS:$dst), (ins ZREG:$z, LD8:$p),
-                            "elpmw\t$dst, $z+, $p", []>,
-                     Requires<[HasELPMX]>;
-  }
-}
-
-// Store program memory operations.
-let Uses = [R1, R0] in {
-  let Uses = [R31R30, R1, R0] in def SPM
-      : F16<0b1001010111101000, (outs), (ins), "spm", []>,
-      Requires<[HasSPM]>;
-
-  let Defs = [R31R30] in def SPMZPi : F16<0b1001010111111000, (outs),
-                                          (ins ZREG
-                                           : $z),
-                                          "spm $z+", []>,
-      Requires<[HasSPMX]>;
-}
-
 // Read data from IO location operations.
 let canFoldAsLoad = 1, isReMaterializable = 1 in {
   def INRdA : FIORdA<(outs GPR8
@@ -1337,39 +1143,6 @@ let Defs = [SP], Uses = [SP], hasSideEffects = 0 in {
                  Requires<[HasSRAM]>;
   }
 }
-
-// Read-Write-Modify (RMW) instructions.
-def XCHZRd : FZRd<0b100,
-                  (outs GPR8
-                   : $rd),
-                  (ins ZREG
-                   : $z),
-                  "xch\t$z, $rd", []>,
-             Requires<[SupportsRMW]>;
-
-def LASZRd : FZRd<0b101,
-                  (outs GPR8
-                   : $rd),
-                  (ins ZREG
-                   : $z),
-                  "las\t$z, $rd", []>,
-             Requires<[SupportsRMW]>;
-
-def LACZRd : FZRd<0b110,
-                  (outs GPR8
-                   : $rd),
-                  (ins ZREG
-                   : $z),
-                  "lac\t$z, $rd", []>,
-             Requires<[SupportsRMW]>;
-
-def LATZRd : FZRd<0b111,
-                  (outs GPR8
-                   : $rd),
-                  (ins ZREG
-                   : $z),
-                  "lat\t$z, $rd", []>,
-             Requires<[SupportsRMW]>;
 
 //===----------------------------------------------------------------------===//
 // Bit and bit-test instructions
@@ -1524,14 +1297,6 @@ let Constraints = "$src = $rd", Defs = [SREG] in {
                         [(set i8:$rd, (BLUCPUrol i8:$src)),
                         (implicit SREG)]>,
                  Requires<[HasNonTinyEncoding]>;
-
-  let Uses = [R17] in
-  def ROLBRdR17 : Pseudo<(outs GPR8:$rd),
-                         (ins GPR8:$src),
-                         "rolb\t$rd",
-                         [(set i8:$rd, (BLUCPUrol i8:$src)),
-                         (implicit SREG)]>,
-                  Requires<[HasTinyEncoding]>;
 
   def RORBRd : Pseudo<(outs GPR8
                        : $rd),
@@ -1966,13 +1731,6 @@ def : Pat<(subc i16 : $src, imm : $src2), (SUBIWRdK i16 : $src, imm : $src2)>;
 // These patterns convert add (x, -imm) to sub (x, imm) since we dont have
 // any add with imm instructions. Also take care of the adiw/sbiw instructions.
 def : Pat<(add i16
-           : $src1, imm0_63_neg
-           : $src2),
-          (SBIWRdK i16
-           : $src1, (imm0_63_neg
-                     : $src2))>,
-          Requires<[HasADDSUBIW]>;
-def : Pat<(add i16
            : $src1, imm
            : $src2),
           (SUBIWRdK i16
@@ -2042,18 +1800,12 @@ def : Pat<(add i16
 def : Pat<(i8(load(BLUCPUWrapper tglobaladdr:$dst))),
           (LDSRdK tglobaladdr:$dst)>,
           Requires<[HasSRAM, HasNonTinyEncoding]>;
-def : Pat<(i8(load(BLUCPUWrapper tglobaladdr:$dst))),
-          (LDSRdKTiny tglobaladdr:$dst)>,
-          Requires<[HasSRAM, HasTinyEncoding]>;
 def : Pat<(i16(load(BLUCPUWrapper tglobaladdr:$dst))),
           (LDSWRdK tglobaladdr:$dst)>,
           Requires<[HasSRAM, HasNonTinyEncoding]>;
 def : Pat<(store i8:$src, (i16(BLUCPUWrapper tglobaladdr:$dst))),
           (STSKRr tglobaladdr:$dst, i8:$src)>,
           Requires<[HasSRAM, HasNonTinyEncoding]>;
-def : Pat<(store i8:$src, (i16(BLUCPUWrapper tglobaladdr:$dst))),
-          (STSKRrTiny tglobaladdr:$dst, i8:$src)>,
-          Requires<[HasSRAM, HasTinyEncoding]>;
 def : Pat<(store i16:$src, (i16(BLUCPUWrapper tglobaladdr:$dst))),
           (STSWKRr tglobaladdr:$dst, i16:$src)>,
           Requires<[HasSRAM, HasNonTinyEncoding]>;

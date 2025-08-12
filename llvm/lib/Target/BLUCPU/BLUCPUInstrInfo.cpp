@@ -47,33 +47,26 @@ void BLUCPUInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   unsigned Opc;
 
   if (BLUCPU::DREGSRegClass.contains(DestReg, SrcReg)) {
-    // If our BLUCPU has `movw`, let's emit that; otherwise let's emit two separate
-    // `mov`s.
-    if (STI.hasMOVW() && BLUCPU::DREGSMOVWRegClass.contains(DestReg, SrcReg)) {
-      BuildMI(MBB, MI, DL, get(BLUCPU::MOVWRdRr), DestReg)
-          .addReg(SrcReg, getKillRegState(KillSrc));
+    Register DestLo, DestHi, SrcLo, SrcHi;
+
+    TRI.splitReg(DestReg, DestLo, DestHi);
+    TRI.splitReg(SrcReg, SrcLo, SrcHi);
+
+    // Emit the copies.
+    // The original instruction was for a register pair, of which only one
+    // register might have been live. Add 'undef' to satisfy the machine
+    // verifier, when subreg liveness is enabled.
+    // TODO: Eliminate these unnecessary copies.
+    if (DestLo == SrcHi) {
+      BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestHi)
+          .addReg(SrcHi, getKillRegState(KillSrc) | RegState::Undef);
+      BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestLo)
+          .addReg(SrcLo, getKillRegState(KillSrc) | RegState::Undef);
     } else {
-      Register DestLo, DestHi, SrcLo, SrcHi;
-
-      TRI.splitReg(DestReg, DestLo, DestHi);
-      TRI.splitReg(SrcReg, SrcLo, SrcHi);
-
-      // Emit the copies.
-      // The original instruction was for a register pair, of which only one
-      // register might have been live. Add 'undef' to satisfy the machine
-      // verifier, when subreg liveness is enabled.
-      // TODO: Eliminate these unnecessary copies.
-      if (DestLo == SrcHi) {
-        BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestHi)
-            .addReg(SrcHi, getKillRegState(KillSrc) | RegState::Undef);
-        BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestLo)
-            .addReg(SrcLo, getKillRegState(KillSrc) | RegState::Undef);
-      } else {
-        BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestLo)
-            .addReg(SrcLo, getKillRegState(KillSrc) | RegState::Undef);
-        BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestHi)
-            .addReg(SrcHi, getKillRegState(KillSrc) | RegState::Undef);
-      }
+      BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestLo)
+          .addReg(SrcLo, getKillRegState(KillSrc) | RegState::Undef);
+      BuildMI(MBB, MI, DL, get(BLUCPU::MOVRdRr), DestHi)
+          .addReg(SrcHi, getKillRegState(KillSrc) | RegState::Undef);
     }
   } else {
     if (BLUCPU::GPR8RegClass.contains(DestReg, SrcReg)) {
@@ -539,7 +532,7 @@ bool BLUCPUInstrInfo::isBranchOffsetInRange(unsigned BranchOp,
     llvm_unreachable("unexpected opcode!");
   case BLUCPU::JMPk:
   case BLUCPU::CALLk:
-    return STI.hasJMPCALL();
+    return true;
   case BLUCPU::RCALLk:
   case BLUCPU::RJMPk:
     return isIntN(13, BrOffset);
@@ -567,13 +560,7 @@ void BLUCPUInstrInfo::insertIndirectBranch(MachineBasicBlock &MBB,
   // insertBranch or some hypothetical "insertDirectBranch".
   // See lib/CodeGen/RegisterRelaxation.cpp for details.
   // We end up here when a jump is too long for a RJMP instruction.
-  if (STI.hasJMPCALL())
-    BuildMI(&MBB, DL, get(BLUCPU::JMPk)).addMBB(&NewDestBB);
-  else
-    // The RJMP may jump to a far place beyond its legal range. We let the
-    // linker to report 'out of range' rather than crash, or silently emit
-    // incorrect assembly code.
-    BuildMI(&MBB, DL, get(BLUCPU::RJMPk)).addMBB(&NewDestBB);
+  BuildMI(&MBB, DL, get(BLUCPU::JMPk)).addMBB(&NewDestBB);
 }
 
 } // end of namespace llvm

@@ -488,14 +488,6 @@ DecodeStatus BLUCPUDisassembler::getInstruction(MCInst &Instr, uint64_t &Size,
     if (Result == MCDisassembler::Fail)
       return MCDisassembler::Fail;
 
-    // Try to decode BLUCPUTiny instructions.
-    if (STI.hasFeature(BLUCPU::FeatureTinyEncoding)) {
-      Result = decodeInstruction(DecoderTableBLUCPUTiny16, Instr, Insn, Address,
-                                 this, STI);
-      if (Result != MCDisassembler::Fail)
-        return Result;
-    }
-
     // Try to auto-decode a 16-bit instruction.
     Result = decodeInstruction(getDecoderTable(Size), Instr, Insn, Address,
                                this, STI);

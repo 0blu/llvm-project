@@ -119,8 +119,7 @@ void BLUCPUFrameLowering::emitPrologue(MachineFunction &MF,
   }
 
   // Reserve the necessary frame memory by doing FP -= <size>.
-  unsigned Opcode = (isUInt<6>(FrameSize) && STI.hasADDSUBIW()) ? BLUCPU::SBIWRdK
-                                                                : BLUCPU::SUBIWRdK;
+  unsigned Opcode = BLUCPU::SUBIWRdK;
 
   MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII.get(Opcode), BLUCPU::R29R28)
                          .addReg(BLUCPU::R29R28, RegState::Kill)
@@ -201,12 +200,8 @@ void BLUCPUFrameLowering::emitEpilogue(MachineFunction &MF,
     unsigned Opcode;
 
     // Select the optimal opcode depending on how big it is.
-    if (isUInt<6>(FrameSize) && STI.hasADDSUBIW()) {
-      Opcode = BLUCPU::ADIWRdK;
-    } else {
-      Opcode = BLUCPU::SUBIWRdK;
-      FrameSize = -FrameSize;
-    }
+    Opcode = BLUCPU::SUBIWRdK;
+    FrameSize = -FrameSize;
 
     // Restore the frame pointer by doing FP += <size>.
     MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII.get(Opcode), BLUCPU::R29R28)
@@ -391,14 +386,9 @@ MachineBasicBlock::iterator BLUCPUFrameLowering::eliminateCallFramePseudoInstr(
     // required.
 
     // Select the best opcode to adjust SP based on the offset size.
-    unsigned AddOpcode;
 
-    if (isUInt<6>(Amount) && STI.hasADDSUBIW()) {
-      AddOpcode = BLUCPU::ADIWRdK;
-    } else {
-      AddOpcode = BLUCPU::SUBIWRdK;
-      Amount = -Amount;
-    }
+    unsigned AddOpcode = BLUCPU::SUBIWRdK;
+    Amount = -Amount;
 
     // Build the instruction sequence.
     BuildMI(MBB, MI, DL, TII.get(BLUCPU::SPREAD), BLUCPU::R31R30).addReg(BLUCPU::SP);

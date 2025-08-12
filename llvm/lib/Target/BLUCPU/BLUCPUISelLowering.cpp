@@ -173,13 +173,6 @@ BLUCPUTargetLowering::BLUCPUTargetLowering(const BLUCPUTargetMachine &TM,
   setOperationAction(ISD::SMUL_LOHI, MVT::i16, Expand);
   setOperationAction(ISD::UMUL_LOHI, MVT::i16, Expand);
 
-  // Expand multiplications to libcalls when there is
-  // no hardware MUL.
-  if (!Subtarget.supportsMultiplication()) {
-    setOperationAction(ISD::SMUL_LOHI, MVT::i8, Expand);
-    setOperationAction(ISD::UMUL_LOHI, MVT::i8, Expand);
-  }
-
   for (MVT VT : MVT::integer_valuetypes()) {
     setOperationAction(ISD::MULHS, VT, Expand);
     setOperationAction(ISD::MULHU, VT, Expand);
@@ -1145,7 +1138,7 @@ bool BLUCPUTargetLowering::getPostIndexedAddressParts(SDNode *N, SDNode *Op,
     // i16 post increment store like:
     // st X+, r24
     // st X+, r25
-    if (VT == MVT::i16 && !Subtarget.hasLowByteFirst())
+    if (VT == MVT::i16)
       return false;
   } else {
     return false;
@@ -1381,8 +1374,7 @@ SDValue BLUCPUTargetLowering::LowerFormalArguments(
   if (isVarArg) {
     CCInfo.AnalyzeFormalArguments(Ins, ArgCC_BLUCPU_Vararg);
   } else {
-    analyzeArguments(nullptr, &MF.getFunction(), &DL, Ins, ArgLocs, CCInfo,
-                     Subtarget.hasTinyEncoding());
+    analyzeArguments(nullptr, &MF.getFunction(), &DL, Ins, ArgLocs, CCInfo, false);
   }
 
   SDValue ArgValue;
@@ -1507,8 +1499,7 @@ SDValue BLUCPUTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   if (isVarArg) {
     CCInfo.AnalyzeCallOperands(Outs, ArgCC_BLUCPU_Vararg);
   } else {
-    analyzeArguments(&CLI, F, &DAG.getDataLayout(), Outs, ArgLocs, CCInfo,
-                     Subtarget.hasTinyEncoding());
+    analyzeArguments(&CLI, F, &DAG.getDataLayout(), Outs, ArgLocs, CCInfo, false);
   }
 
   // Get a count of how many bytes are to be pushed on the stack.
@@ -1657,7 +1648,7 @@ SDValue BLUCPUTargetLowering::LowerCallResult(
   //  CCInfo.AnalyzeCallResult(Ins, RetCC_BLUCPU_BUILTIN);
   //} else
   {
-    analyzeReturnValues(Ins, CCInfo, Subtarget.hasTinyEncoding());
+    analyzeReturnValues(Ins, CCInfo, false);
   }
 
   // Copy all of the result registers out of their specified physreg.
@@ -1686,7 +1677,7 @@ bool BLUCPUTargetLowering::CanLowerReturn(
   //}
 
   unsigned TotalBytes = getTotalArgumentsSizeInBytes(Outs);
-  return TotalBytes <= (unsigned)(Subtarget.hasTinyEncoding() ? 4 : 8);
+  return TotalBytes <= (unsigned)(8);
 }
 
 SDValue
@@ -1709,7 +1700,7 @@ BLUCPUTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   //  CCInfo.AnalyzeReturn(Outs, RetCC_BLUCPU_BUILTIN);
   //} else
   {
-    analyzeReturnValues(Outs, CCInfo, Subtarget.hasTinyEncoding());
+    analyzeReturnValues(Outs, CCInfo, false);
   }
 
   SDValue Glue;
@@ -1758,9 +1749,7 @@ BLUCPUTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 //  Custom Inserters
 //===----------------------------------------------------------------------===//
 
-MachineBasicBlock *BLUCPUTargetLowering::insertShift(MachineInstr &MI,
-                                                  MachineBasicBlock *BB,
-                                                  bool Tiny) const {
+MachineBasicBlock *BLUCPUTargetLowering::insertShift(MachineInstr &MI, MachineBasicBlock *BB) const {
   unsigned Opc;
   const TargetRegisterClass *RC;
   bool HasRepeatedOperand = false;
@@ -1798,7 +1787,7 @@ MachineBasicBlock *BLUCPUTargetLowering::insertShift(MachineInstr &MI,
     RC = &BLUCPU::DREGSRegClass;
     break;
   case BLUCPU::Rol8:
-    Opc = Tiny ? BLUCPU::ROLBRdR17 : BLUCPU::ROLBRdR1;
+    Opc = BLUCPU::ROLBRdR1;
     RC = &BLUCPU::GPR8RegClass;
     break;
   case BLUCPU::Rol16:
@@ -2356,7 +2345,7 @@ BLUCPUTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case BLUCPU::Ror16:
   case BLUCPU::Asr8:
   case BLUCPU::Asr16:
-    return insertShift(MI, MBB, STI.hasTinyEncoding());
+    return insertShift(MI, MBB);
   case BLUCPU::Lsl32:
   case BLUCPU::Lsr32:
   case BLUCPU::Asr32:

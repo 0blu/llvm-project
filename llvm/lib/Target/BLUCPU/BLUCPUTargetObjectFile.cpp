@@ -43,39 +43,11 @@ MCSection *BLUCPUTargetObjectFile::SelectSectionForGlobal(
   if (BLUCPU::isProgramMemoryAddress(GO) && !GO->hasSection() &&
       Kind.isReadOnly()) {
     // The BLUCPU subtarget should support LPM to access section '.progmem*.data'.
-    if (!BLUCPUTM.getSubtargetImpl()->hasLPM()) {
-      // TODO: Get the global object's location in source file.
-      getContext().reportError(
-          SMLoc(),
-          "Current BLUCPU subtarget does not support accessing program memory");
-      return Base::SelectSectionForGlobal(GO, Kind, TM);
-    }
-    // The BLUCPU subtarget should support ELPM to access section
-    // '.progmem[1|2|3|4|5].data'.
-    if (!BLUCPUTM.getSubtargetImpl()->hasELPM() &&
-        BLUCPU::getAddressSpace(GO) != BLUCPU::ProgramMemory) {
-      // TODO: Get the global object's location in source file.
-      getContext().reportError(SMLoc(),
-                               "Current BLUCPU subtarget does not support "
-                               "accessing extended program memory");
-      return ProgmemDataSection;
-    }
-    switch (BLUCPU::getAddressSpace(GO)) {
-    case BLUCPU::ProgramMemory: // address space 1
-      return ProgmemDataSection;
-    case BLUCPU::ProgramMemory1: // address space 2
-      return Progmem1DataSection;
-    case BLUCPU::ProgramMemory2: // address space 3
-      return Progmem2DataSection;
-    case BLUCPU::ProgramMemory3: // address space 4
-      return Progmem3DataSection;
-    case BLUCPU::ProgramMemory4: // address space 5
-      return Progmem4DataSection;
-    case BLUCPU::ProgramMemory5: // address space 6
-      return Progmem5DataSection;
-    default:
-      llvm_unreachable("unexpected program memory index");
-    }
+    // TODO: Get the global object's location in source file.
+    getContext().reportError(
+        SMLoc(),
+        "Current BLUCPU subtarget does not support accessing program memory");
+    return Base::SelectSectionForGlobal(GO, Kind, TM);
   }
 
   // Otherwise, we work the same way as ELF.
